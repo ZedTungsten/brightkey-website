@@ -2190,3 +2190,266 @@ BEGIN
   END IF;
 END
 $$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260819004033_reconcile_a12_duplicate_reservations.sql
+-- =========================================================================
+
+-- Four failed invoice-save attempts reserved the same one-unit A12 TT item
+-- before the booking update failed. The later cancellation restored reserved
+-- but not available, leaving this exact warehouse row understated by four.
+-- Snapshot guards make the correction rerunnable and prevent it from touching
+-- a row whose inventory state has changed since the incident audit.
+
+UPDATE public.inventory AS inventory
+SET
+  available = inventory.available + 4,
+  updated_at = NOW()
+WHERE inventory.id = 'b36b5136-2c79-4021-9774-f9b4af892277'::UUID
+  AND inventory.warehouse_id = '23e0710e-edfe-455f-a0ef-74df6749687b'::UUID
+  AND upper(trim(inventory.sku)) = 'A12 TT'
+  AND inventory.available = 3
+  AND inventory.reserved = 0
+  AND inventory.cancelled = 4
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.inventory_transactions AS transaction
+    WHERE transaction.reference_id = 'ORD-20260815-040'
+      AND transaction.warehouse_id = inventory.warehouse_id
+      AND upper(trim(transaction.sku)) = 'A12 TT'
+      AND transaction.type = 'customer_order'
+      AND transaction.status IN ('reserved', 'inspect', 'packed', 'dispatched')
+  );
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260819010000_restore_ord_20260815_040_inspect_reservation.sql
+-- =========================================================================
+
+-- The duplicate-reservation cleanup for this order cancelled all four A12 TT
+-- rows. Restore the earliest row as the one legitimate reservation so the
+-- order returns to Warehouse Inspect, while keeping the three retries cancelled.
+
+DO $$
+DECLARE
+  target_inventory public.inventory%ROWTYPE;
+  cancelled_count INTEGER;
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.inventory_transactions
+    WHERE reference_id = 'ORD-20260815-040'
+      AND warehouse_id = '23e0710e-edfe-455f-a0ef-74df6749687b'::UUID
+      AND upper(trim(sku)) = 'A12 TT'
+      AND type = 'customer_order'
+      AND status IN ('reserved', 'inspect', 'packed', 'dispatched')
+  ) THEN
+    RETURN;
+  END IF;
+
+  SELECT *
+  INTO target_inventory
+  FROM public.inventory
+  WHERE id = 'b36b5136-2c79-4021-9774-f9b4af892277'::UUID
+  FOR UPDATE;
+
+  SELECT count(*)
+  INTO cancelled_count
+  FROM public.inventory_transactions
+  WHERE reference_id = 'ORD-20260815-040'
+    AND warehouse_id = '23e0710e-edfe-455f-a0ef-74df6749687b'::UUID
+    AND upper(trim(sku)) = 'A12 TT'
+    AND type = 'customer_order'
+    AND status = 'cancelled';
+
+  IF target_inventory.id IS NULL
+     OR target_inventory.available <> 7
+     OR target_inventory.reserved <> 0
+     OR target_inventory.cancelled <> 4
+     OR cancelled_count <> 4 THEN
+    RAISE EXCEPTION 'Incident inventory state changed; refusing automatic repair';
+  END IF;
+
+  UPDATE public.inventory_transactions
+  SET
+    status = 'reserved',
+    timestamp_cancelled = NULL,
+    updated_at = NOW()
+  WHERE id = 'c3287276-3d8b-4034-a39a-7603321a3784'::UUID
+    AND status = 'cancelled';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Incident transaction is unavailable; refusing automatic repair';
+  END IF;
+
+  UPDATE public.inventory
+  SET
+    available = available - 1,
+    reserved = reserved + 1,
+    updated_at = NOW()
+  WHERE id = target_inventory.id;
+END
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260819012000_prevent_duplicate_active_customer_order_reservations.sql
+-- =========================================================================
+
+-- Prevent future duplicate active reservation rows even when a caller bypasses
+-- the atomic reservation RPC. Existing historical duplicates remain untouched.
+
+CREATE OR REPLACE FUNCTION public.prevent_duplicate_active_customer_order_reservation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.type <> 'customer_order'
+     OR NEW.status NOT IN ('reserved', 'inspect', 'packed', 'dispatched') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Allow an existing active row to advance through the workflow. This keeps
+  -- historical duplicate rows operable while preventing new active duplicates.
+  IF TG_OP = 'UPDATE'
+     AND OLD.status IN ('reserved', 'inspect', 'packed', 'dispatched')
+     AND OLD.company_id IS NOT DISTINCT FROM NEW.company_id
+     AND OLD.warehouse_id IS NOT DISTINCT FROM NEW.warehouse_id
+     AND OLD.reference_id IS NOT DISTINCT FROM NEW.reference_id
+     AND upper(trim(OLD.sku)) IS NOT DISTINCT FROM upper(trim(NEW.sku))
+     AND OLD.type IS NOT DISTINCT FROM NEW.type THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    concat_ws(
+      ':',
+      COALESCE(NEW.company_id::TEXT, ''),
+      COALESCE(NEW.warehouse_id::TEXT, ''),
+      COALESCE(NEW.reference_id, ''),
+      upper(trim(COALESCE(NEW.sku, ''))),
+      NEW.type
+    ),
+    0
+  ));
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.inventory_transactions AS existing
+    WHERE existing.id IS DISTINCT FROM NEW.id
+      AND existing.company_id IS NOT DISTINCT FROM NEW.company_id
+      AND existing.warehouse_id IS NOT DISTINCT FROM NEW.warehouse_id
+      AND existing.reference_id = NEW.reference_id
+      AND upper(trim(existing.sku)) = upper(trim(NEW.sku))
+      AND existing.type = 'customer_order'
+      AND existing.status IN ('reserved', 'inspect', 'packed', 'dispatched')
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23505',
+      MESSAGE = 'An active reservation already exists for this order and SKU.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS prevent_duplicate_active_customer_order_reservation
+  ON public.inventory_transactions;
+
+CREATE TRIGGER prevent_duplicate_active_customer_order_reservation
+BEFORE INSERT OR UPDATE OF company_id, warehouse_id, reference_id, sku, type, status
+ON public.inventory_transactions
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_duplicate_active_customer_order_reservation();
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260820030000_align_inventory_reservation_conflict_target.sql
+-- =========================================================================
+
+-- Align the customer-order reservation RPC with the live inventory identity.
+-- Warehouse UUIDs are globally unique, so warehouse_id + sku is authoritative.
+-- The stale company_id + warehouse_id + sku conflict target did not catch the
+-- live inventory_warehouse_sku_unique constraint and caused HTTP 409 responses.
+
+DO $$
+DECLARE
+  function_sql TEXT;
+  corrected_sql TEXT;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'public.reserve_customer_order_inventory(uuid,uuid,text,text,text,timestamptz,jsonb)'::regprocedure
+  )
+  INTO function_sql;
+
+  corrected_sql := replace(
+    function_sql,
+    'ON CONFLICT (company_id, warehouse_id, sku)
+    DO UPDATE SET
+      available = public.inventory.available - EXCLUDED.reserved,',
+    'ON CONFLICT (warehouse_id, sku)
+    DO UPDATE SET
+      company_id = EXCLUDED.company_id,
+      available = public.inventory.available - EXCLUDED.reserved,'
+  );
+
+  IF corrected_sql = function_sql THEN
+    IF position('ON CONFLICT (warehouse_id, sku)' IN function_sql) > 0 THEN
+      RETURN;
+    END IF;
+
+    RAISE EXCEPTION 'reserve_customer_order_inventory conflict target was not recognized';
+  END IF;
+
+  EXECUTE corrected_sql;
+END;
+$$;
+
+NOTIFY pgrst, 'reload schema';
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821070000_validate_products_against_tenant_businesses.sql
+-- =========================================================================
+
+-- Product business keys come from each company's configured tenant businesses.
+-- Replace the legacy four-value constraint with tenant-scoped validation.
+ALTER TABLE public.products
+  DROP CONSTRAINT IF EXISTS products_business_check;
+
+CREATE OR REPLACE FUNCTION public.validate_product_business()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE'
+     AND NEW.company_id IS NOT DISTINCT FROM OLD.company_id
+     AND NEW.business IS NOT DISTINCT FROM OLD.business THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.tenant_businesses AS business
+    WHERE business.company_id = NEW.company_id
+      AND lower(regexp_replace(business.name, '[[:space:]_.-]+', '_', 'g')) = NEW.business
+  ) THEN
+    RAISE EXCEPTION 'Select a business configured for this company.'
+      USING ERRCODE = '23514',
+            CONSTRAINT = 'products_business_company_check';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_product_business_trigger ON public.products;
+CREATE TRIGGER validate_product_business_trigger
+  BEFORE INSERT OR UPDATE OF company_id, business ON public.products
+  FOR EACH ROW
+  EXECUTE FUNCTION public.validate_product_business();

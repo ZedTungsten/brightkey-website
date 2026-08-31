@@ -1917,3 +1917,217 @@ REVOKE ALL ON FUNCTION public.sync_customer_portal_account_from_booking() FROM P
 
 COMMENT ON FUNCTION public.sync_customer_portal_account_from_booking() IS
   'Synchronizes customer portal state from authorized booking writes without exposing portal account mutations through the Data API.';
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821030000_add_platform_tenant_user_counts.sql
+-- =========================================================================
+
+CREATE OR REPLACE FUNCTION public.get_platform_tenants()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF LOWER(COALESCE(auth.jwt() ->> 'email', '')) <> 'johnzeustaller@gmail.com' THEN
+    RAISE EXCEPTION 'Platform owner access required' USING ERRCODE = '42501';
+  END IF;
+
+  RETURN jsonb_build_object(
+    'tenants', COALESCE((
+      SELECT jsonb_agg(to_jsonb(tenant_row))
+      FROM (
+        SELECT tenant.id, tenant.owner_email, tenant.owner_first_name,
+          tenant.owner_last_name, tenant.mobile_number, tenant.street_address,
+          tenant.city, tenant.province, tenant.country, tenant.pricing_tier_id,
+          tenant.storage_limit_mb, tenant.created_at,
+          (
+            SELECT COUNT(DISTINCT member.user_id)
+            FROM public.tenant_members member
+            WHERE member.tenant_id = tenant.id
+              AND member.user_id IS NOT NULL
+          ) + CASE
+            WHEN NULLIF(LOWER(TRIM(tenant.owner_email)), '') IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM public.tenant_members member
+                LEFT JOIN auth.users account ON account.id = member.user_id
+                WHERE member.tenant_id = tenant.id
+                  AND member.user_id IS NOT NULL
+                  AND LOWER(COALESCE(NULLIF(TRIM(member.user_email), ''), account.email, '')) =
+                    LOWER(TRIM(tenant.owner_email))
+              )
+            THEN 1
+            ELSE 0
+          END AS current_user_count
+        FROM public.tenants tenant
+        ORDER BY tenant.created_at
+        LIMIT 100
+      ) AS tenant_row
+    ), '[]'::JSONB),
+    'companies', COALESCE((
+      SELECT jsonb_agg(to_jsonb(company_row))
+      FROM (
+        SELECT id, tenant_id, name, subdomain
+        FROM public.companies
+        WHERE tenant_id IN (SELECT id FROM public.tenants ORDER BY created_at LIMIT 100)
+        LIMIT 100
+      ) AS company_row
+    ), '[]'::JSONB),
+    'plans', COALESCE((
+      SELECT jsonb_agg(to_jsonb(plan_row))
+      FROM (
+        SELECT id, name, user_limit, storage_limit_gb
+        FROM public.pricing_tiers
+        ORDER BY price_php
+        LIMIT 50
+      ) AS plan_row
+    ), '[]'::JSONB)
+  );
+END;
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821060000_allow_tenant_owners_manage_business_features.sql
+-- =========================================================================
+
+-- Authoritative tenant owners may manage features for businesses belonging to
+-- their company even when no duplicate tenant_members row exists.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'business_features'
+      AND policyname = 'Tenant owners manage business features'
+  ) THEN
+    CREATE POLICY "Tenant owners manage business features"
+      ON public.business_features
+      FOR ALL
+      TO authenticated
+      USING (
+        EXISTS (
+          SELECT 1
+          FROM public.tenant_businesses AS business
+          WHERE business.id = business_features.business_id
+            AND public.is_company_owner(business.company_id)
+        )
+      )
+      WITH CHECK (
+        EXISTS (
+          SELECT 1
+          FROM public.tenant_businesses AS business
+          WHERE business.id = business_features.business_id
+            AND public.is_company_owner(business.company_id)
+        )
+      );
+  END IF;
+END
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260822010000_generate_customer_affiliate_codes.sql
+-- =========================================================================
+
+-- Generate readable customer affiliate codes without changing manually edited codes.
+
+CREATE OR REPLACE FUNCTION public.set_generated_customer_affiliate_code()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  base_code TEXT;
+  candidate_code TEXT;
+  suffix_number INTEGER := 0;
+BEGIN
+  IF TG_TABLE_SCHEMA <> 'public' OR TG_TABLE_NAME <> 'customer_portal_accounts' THEN
+    RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'Affiliate code generation is restricted to customer portal accounts.';
+  END IF;
+
+  IF NEW.affiliate_code IS NOT NULL
+     AND NEW.affiliate_code !~ '^BK-[A-F0-9]{8}$' THEN
+    RETURN NEW;
+  END IF;
+
+  base_code := 'LOOCK'
+    || upper(regexp_replace(COALESCE(NEW.customer_first_name, ''), '[^a-zA-Z0-9]', '', 'g'))
+    || upper(left(regexp_replace(COALESCE(NEW.customer_last_name, ''), '[^a-zA-Z0-9]', '', 'g'), 1));
+  IF base_code = 'LOOCK' THEN
+    base_code := 'LOOCKCUSTOMER';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(base_code, 0));
+  candidate_code := base_code;
+  WHILE EXISTS (
+    SELECT 1
+    FROM public.customer_portal_accounts AS account
+    WHERE account.affiliate_code = candidate_code
+      AND account.id IS DISTINCT FROM NEW.id
+  ) LOOP
+    suffix_number := suffix_number + 1;
+    candidate_code := base_code || suffix_number::TEXT;
+  END LOOP;
+
+  NEW.affiliate_code := candidate_code;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.set_generated_customer_affiliate_code() FROM PUBLIC;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgname = 'set_generated_customer_affiliate_code_before_insert'
+      AND tgrelid = 'public.customer_portal_accounts'::regclass
+  ) THEN
+    CREATE TRIGGER set_generated_customer_affiliate_code_before_insert
+      BEFORE INSERT ON public.customer_portal_accounts
+      FOR EACH ROW EXECUTE FUNCTION public.set_generated_customer_affiliate_code();
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  account_row RECORD;
+  base_code TEXT;
+  candidate_code TEXT;
+  suffix_number INTEGER;
+BEGIN
+  FOR account_row IN
+    SELECT id, customer_first_name, customer_last_name
+    FROM public.customer_portal_accounts
+    WHERE affiliate_code ~ '^BK-[A-F0-9]{8}$'
+    ORDER BY created_at, id
+  LOOP
+    base_code := 'LOOCK'
+      || upper(regexp_replace(COALESCE(account_row.customer_first_name, ''), '[^a-zA-Z0-9]', '', 'g'))
+      || upper(left(regexp_replace(COALESCE(account_row.customer_last_name, ''), '[^a-zA-Z0-9]', '', 'g'), 1));
+    IF base_code = 'LOOCK' THEN base_code := 'LOOCKCUSTOMER'; END IF;
+    candidate_code := base_code;
+    suffix_number := 0;
+    WHILE EXISTS (
+      SELECT 1 FROM public.customer_portal_accounts AS existing
+      WHERE existing.affiliate_code = candidate_code
+        AND existing.id <> account_row.id
+    ) LOOP
+      suffix_number := suffix_number + 1;
+      candidate_code := base_code || suffix_number::TEXT;
+    END LOOP;
+    UPDATE public.customer_portal_accounts
+    SET affiliate_code = candidate_code, updated_at = NOW()
+    WHERE id = account_row.id;
+  END LOOP;
+END
+$$;
+
+COMMENT ON FUNCTION public.set_generated_customer_affiliate_code() IS
+  'Assigns LOOCK{FIRSTNAME}{LASTINITIAL} affiliate codes, adding a numeric suffix only for duplicates.';

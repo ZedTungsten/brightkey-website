@@ -2649,3 +2649,363 @@ BEGIN
   END IF;
 END
 $$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260820020000_prevent_overlapping_leave_requests.sql
+-- =========================================================================
+
+-- Prevent an employee from holding more than one pending or approved leave
+-- request for the same calendar day. Existing duplicate rows remain available
+-- for audit history; only the later active duplicate is rejected.
+
+WITH ranked_active_requests AS (
+  SELECT
+    request.id,
+    row_number() OVER (
+      PARTITION BY request.company_id, request.employee_id, request.date_from, request.date_to
+      ORDER BY
+        CASE WHEN lower(request.status) = 'approved' THEN 0 ELSE 1 END,
+        request.created_at,
+        request.id
+    ) AS duplicate_rank
+  FROM public.leave_requests AS request
+  WHERE lower(request.status) IN ('pending', 'approved')
+)
+UPDATE public.leave_requests AS request
+SET
+  status = 'rejected',
+  rejected_reason = coalesce(
+    nullif(request.rejected_reason, ''),
+    'Automatically rejected because another active leave request covers the same dates.'
+  ),
+  updated_at = now()
+FROM ranked_active_requests AS ranked
+WHERE ranked.id = request.id
+  AND ranked.duplicate_rank > 1;
+
+CREATE OR REPLACE FUNCTION public.prevent_overlapping_active_leave_requests()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF lower(coalesce(NEW.status, 'pending')) NOT IN ('pending', 'approved') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Serialize checks for the same tenant employee so concurrent submissions
+  -- cannot both pass the overlap test before either transaction commits.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(NEW.company_id::text || ':' || NEW.employee_id::text, 0)
+  );
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.leave_requests AS existing
+    WHERE existing.company_id = NEW.company_id
+      AND existing.employee_id = NEW.employee_id
+      AND existing.id <> NEW.id
+      AND lower(coalesce(existing.status, '')) IN ('pending', 'approved')
+      AND existing.date_from <= NEW.date_to
+      AND existing.date_to >= NEW.date_from
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'An overlapping pending or approved leave request already exists.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.prevent_overlapping_active_leave_requests() FROM PUBLIC;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger
+    WHERE tgrelid = 'public.leave_requests'::regclass
+      AND tgname = 'prevent_overlapping_active_leave_requests'
+      AND NOT tgisinternal
+  ) THEN
+    CREATE TRIGGER prevent_overlapping_active_leave_requests
+      BEFORE INSERT OR UPDATE OF company_id, employee_id, date_from, date_to, status
+      ON public.leave_requests
+      FOR EACH ROW
+      EXECUTE FUNCTION public.prevent_overlapping_active_leave_requests();
+  END IF;
+END;
+$$;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821010000_fix_employee_self_update_identity.sql
+-- =========================================================================
+
+-- Employee records use their own primary keys; they are not keyed by auth.users.id.
+-- Match self-service updates through the verified account email and tenant access.
+
+DROP POLICY IF EXISTS "Employees can update their own profile details" ON public.employees;
+
+CREATE POLICY "Employees can update their own profile details"
+  ON public.employees
+  FOR UPDATE
+  TO authenticated
+  USING (
+    lower(coalesce(employees.email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    AND EXISTS (
+      SELECT 1
+      FROM public.companies company
+      WHERE company.id = employees.company_id
+        AND company.tenant_id IN (
+          SELECT public.get_user_tenants(auth.uid())
+        )
+    )
+  )
+  WITH CHECK (
+    lower(coalesce(employees.email, '')) = lower(coalesce(auth.jwt() ->> 'email', ''))
+    AND EXISTS (
+      SELECT 1
+      FROM public.companies company
+      WHERE company.id = employees.company_id
+        AND company.tenant_id IN (
+          SELECT public.get_user_tenants(auth.uid())
+        )
+    )
+  );
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821013000_recognize_authoritative_owner_as_team_leader.sql
+-- =========================================================================
+
+-- Free-signup tenant owners are authoritative through tenants.owner_email and
+-- do not require a duplicate tenant_members row. Team write authorization must
+-- use the shared tenant-admin helper so those owners can create milestones.
+
+CREATE OR REPLACE FUNCTION public.is_team_leader(
+  p_user_id UUID,
+  p_company_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_structure JSONB;
+  v_is_leader BOOLEAN := FALSE;
+BEGIN
+  SELECT company.tenant_id
+  INTO v_tenant_id
+  FROM public.companies company
+  WHERE company.id = p_company_id
+  LIMIT 1;
+
+  IF v_tenant_id IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  IF public.is_tenant_admin(p_user_id, v_tenant_id) THEN
+    RETURN TRUE;
+  END IF;
+
+  SELECT setting.value
+  INTO v_structure
+  FROM public.global_settings setting
+  WHERE setting.key = 'company_structure'
+    AND setting.company_id = p_company_id
+  LIMIT 1;
+
+  IF v_structure IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(v_structure->'departments') AS department("managerId" TEXT)
+    WHERE department."managerId" = p_user_id::TEXT
+  )
+  INTO v_is_leader;
+
+  IF v_is_leader THEN
+    RETURN TRUE;
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(v_structure->'departments') AS department(subteams JSONB),
+         jsonb_to_recordset(department.subteams) AS subteam("managerId" TEXT)
+    WHERE subteam."managerId" = p_user_id::TEXT
+  )
+  INTO v_is_leader;
+
+  RETURN v_is_leader;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.is_team_leader(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_team_leader(UUID, UUID) TO authenticated;
+
+COMMENT ON FUNCTION public.is_team_leader(UUID, UUID) IS
+  'Returns true for authoritative tenant owners/admins or managers configured in the company structure.';
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821020000_fix_employee_update_request_identity.sql
+-- =========================================================================
+
+-- Employee directory IDs are independent from auth.users IDs. Authorize
+-- self-service requests through the employee's verified email and tenant.
+
+DROP POLICY IF EXISTS "Users can submit their own update requests"
+  ON public.employee_update_requests;
+DROP POLICY IF EXISTS "Users can view their own update requests"
+  ON public.employee_update_requests;
+
+CREATE POLICY "Users can submit their own update requests"
+  ON public.employee_update_requests
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.employees employee
+      JOIN public.companies company
+        ON company.id = employee.company_id
+      WHERE employee.id = employee_update_requests.employee_id
+        AND company.tenant_id = employee_update_requests.tenant_id
+        AND company.tenant_id IN (
+          SELECT public.get_user_tenants(auth.uid())
+        )
+        AND lower(coalesce(employee.email, '')) =
+            lower(coalesce(auth.jwt() ->> 'email', ''))
+    )
+  );
+
+CREATE POLICY "Users can view their own update requests"
+  ON public.employee_update_requests
+  FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.employees employee
+      JOIN public.companies company
+        ON company.id = employee.company_id
+      WHERE employee.id = employee_update_requests.employee_id
+        AND company.tenant_id = employee_update_requests.tenant_id
+        AND company.tenant_id IN (
+          SELECT public.get_user_tenants(auth.uid())
+        )
+        AND lower(coalesce(employee.email, '')) =
+            lower(coalesce(auth.jwt() ->> 'email', ''))
+    )
+  );
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260821040000_start_company_employee_numbers_at_zero.sql
+-- =========================================================================
+
+-- Start a new company's employee-number sequence at PREFIX-0000.
+-- Existing companies continue after their highest matching employee number.
+CREATE OR REPLACE FUNCTION public.next_company_employee_number(p_company_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  employee_prefix TEXT;
+  next_suffix BIGINT;
+  candidate TEXT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.companies WHERE id = p_company_id) THEN
+    RAISE EXCEPTION 'Company not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Serialize number generation per company so concurrent registrations cannot
+  -- calculate the same next suffix.
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_company_id::TEXT, 0));
+
+  SELECT upper(regexp_replace(COALESCE(value ->> 'employee_prefix', 'BK'), '[^A-Za-z0-9]', '', 'g'))
+    INTO employee_prefix
+  FROM public.global_settings
+  WHERE company_id = p_company_id AND key = 'hr_config'
+  LIMIT 1;
+  employee_prefix := left(COALESCE(NULLIF(employee_prefix, ''), 'BK'), 3);
+
+  SELECT COALESCE(MAX((regexp_match(employee_number, '^[A-Za-z0-9]+-([0-9]+)$'))[1]::BIGINT) + 1, 0)
+    INTO next_suffix
+  FROM public.employees
+  WHERE company_id = p_company_id
+    AND employee_number ~ ('^' || employee_prefix || '-[0-9]+$');
+
+  LOOP
+    candidate := employee_prefix || '-' || lpad(next_suffix::TEXT, 4, '0');
+    EXIT WHEN NOT EXISTS (
+      SELECT 1 FROM public.employees WHERE employee_number = candidate
+    );
+    next_suffix := next_suffix + 1;
+  END LOOP;
+
+  RETURN candidate;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.next_company_employee_number(UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.next_company_employee_number(UUID) TO service_role;
+
+
+-- =========================================================================
+-- CONSOLIDATED SOURCE: 20260822020000_expand_employee_levels_to_seven.sql
+-- =========================================================================
+
+-- Expand the shared employee/job hierarchy from levels 1-4 to levels 1-7.
+-- Existing job posts remain valid and no employee or job data is rewritten.
+DO $$
+DECLARE
+  constraint_record RECORD;
+BEGIN
+  FOR constraint_record IN
+    SELECT constraint_name
+    FROM information_schema.check_constraints
+    WHERE constraint_schema = 'public'
+      AND constraint_name IN (
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = 'public.job_posts'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) ILIKE '%visibility_level%'
+      )
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE public.job_posts DROP CONSTRAINT %I',
+      constraint_record.constraint_name
+    );
+  END LOOP;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'job_posts_visibility_level_range'
+      AND conrelid = 'public.job_posts'::regclass
+  ) THEN
+    ALTER TABLE public.job_posts
+      ADD CONSTRAINT job_posts_visibility_level_range
+      CHECK (visibility_level IS NULL OR visibility_level BETWEEN 1 AND 7)
+      NOT VALID;
+  END IF;
+END $$;
+
+ALTER TABLE public.job_posts
+  VALIDATE CONSTRAINT job_posts_visibility_level_range;

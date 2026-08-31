@@ -219,6 +219,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="../js/auth.js"></script>
+  <script src="../js/payout-snapshots.js"></script>
   <script src="../js/sidebar.js"></script>
   <script src="../js/main.js"></script>
 
@@ -374,6 +375,13 @@
         document.getElementById(`tab-content-${tab}`).classList.add('active');
       },
 
+      isCutoffPaid(entry) {
+        if (typeof window.BKPayoutSnapshots?.isPaid === 'function') {
+          return window.BKPayoutSnapshots.isPaid(entry);
+        }
+        return entry === true || Boolean(entry && typeof entry === 'object' && (entry.checked || entry.paid_value_centavos !== undefined));
+      },
+
       isMonthUnlocked(year, monthIndex) {
         if (!this.employee) return false;
         const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
@@ -382,10 +390,10 @@
         const state = this.regularPayoutState[monthKey];
         if (!state) return false;
 
-        // Check if all scheduled payout days are checked (true)
+        // Check if all scheduled payout days are checked (true or snapshot object)
         const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
         return scheds.every(day => {
-          return state[`${this.employee.id}_${day}`] === true;
+          return this.isCutoffPaid(state[`${this.employee.id}_${day}`]);
         });
       },
 
@@ -397,8 +405,8 @@
         if (!state) return false;
 
         const scheds = this.payoutSchedules.length > 0 ? this.payoutSchedules : [15, 30];
-        const someChecked = scheds.some(day => state[`${this.employee.id}_${day}`] === true);
-        const allChecked = scheds.every(day => state[`${this.employee.id}_${day}`] === true);
+        const someChecked = scheds.some(day => this.isCutoffPaid(state[`${this.employee.id}_${day}`]));
+        const allChecked = scheds.every(day => this.isCutoffPaid(state[`${this.employee.id}_${day}`]));
         
         return someChecked && !allChecked;
       },

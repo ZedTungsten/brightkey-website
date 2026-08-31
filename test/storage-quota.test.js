@@ -49,8 +49,13 @@ test('every rendered dashboard page keeps the shared sidebar loader', () => {
   const redirects = new Set([
     'dashboard/ar-ap/index.html',
     'dashboard/ledgers.html',
+    'dashboard/marketing-media/customers/index.html',
+    'dashboard/marketing-media/index.html',
+    'dashboard/marketing-media/products/index.html',
+    'dashboard/media/index.html',
     'dashboard/payables/index.html',
     'dashboard/payout-tracker.html',
+    'dashboard/posting/index.html',
     'dashboard/pricing-strategy/index.html',
     'dashboard/sales-crm/index.html',
     'dashboard/settings.html',

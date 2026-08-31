@@ -50,7 +50,7 @@
     const nextHash = `#${String(state.month + 1).padStart(2, '0')}-${state.year}`;
     if (window.location.hash !== nextHash) history.replaceState(null, '', nextHash);
     document.querySelectorAll('[data-media-tab]').forEach(link => {
-      link.href = `/dashboard/marketing-media/${link.dataset.mediaTab}${nextHash}`;
+      link.href = `/dashboard/media/${link.dataset.mediaTab}${nextHash}`;
     });
   }
 

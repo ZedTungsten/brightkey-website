@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 test('team leader authorization includes authoritative tenant owners', () => {
   const migration = fs.readFileSync(
-    new URL('../database/migrations/20260821013000_recognize_authoritative_owner_as_team_leader.sql', import.meta.url),
+    new URL('../database/migrations/02_hr_and_employees.sql', import.meta.url),
     'utf8'
   );
 

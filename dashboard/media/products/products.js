@@ -42,8 +42,8 @@
     const customerHash = /^#\d{2}-\d{4}$/.test(window.location.hash)
       ? window.location.hash
       : `#${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-    document.querySelector('[data-media-tab="customers"]').href = `/dashboard/marketing-media/customers${customerHash}`;
-    document.querySelector('[data-media-tab="products"]').href = '/dashboard/marketing-media/products';
+    document.querySelector('[data-media-tab="customers"]').href = `/dashboard/media/customers${customerHash}`;
+    document.querySelector('[data-media-tab="products"]').href = '/dashboard/media/products';
   }
 
   function customerName(booking) {

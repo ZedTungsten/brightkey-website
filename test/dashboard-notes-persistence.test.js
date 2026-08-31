@@ -13,7 +13,7 @@ test('dashboard notes verify a company-scoped employee update', () => {
 
 test('employee self-update policy links auth and employees by email within an accessible tenant', () => {
   const migration = fs.readFileSync(
-    new URL('../database/migrations/20260821010000_fix_employee_self_update_identity.sql', import.meta.url),
+    new URL('../database/migrations/02_hr_and_employees.sql', import.meta.url),
     'utf8'
   );
 

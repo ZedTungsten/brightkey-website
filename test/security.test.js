@@ -209,7 +209,7 @@ test('all employee creation paths use the company-scoped employee number generat
 test('catalog feature database fields are readonly normalized display names', () => {
   const page = fs.readFileSync(new URL('../dashboard/settings/catalog.html', import.meta.url), 'utf8');
   const code = fs.readFileSync(new URL('../dashboard/settings/catalog.js', import.meta.url), 'utf8');
-  const ownerPolicy = fs.readFileSync(new URL('../database/migrations/20260821060000_allow_tenant_owners_manage_business_features.sql', import.meta.url), 'utf8');
+  const ownerPolicy = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
   assert.match(page, /id="feature-name"[^>]*readonly/);
   assert.match(page, /id="feature-name"[^>]*background:var\(--bg-elevated\)[^>]*cursor:not-allowed/);
   assert.match(code, /getElementById\('feature-display-name'\)\.addEventListener\('input'/);
@@ -233,7 +233,7 @@ test('business priorities render numbered six-dot handles and persist drag order
 
 test('catalog products accept only businesses configured for their company', () => {
   const catalog = fs.readFileSync(new URL('../dashboard/catalog.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260821070000_validate_products_against_tenant_businesses.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/03_inventory_and_ecommerce.sql', import.meta.url), 'utf8');
   assert.match(catalog, /b\.name\.toLowerCase\(\)\.replace\(\/\[\\s_.-\]\+\/g, '_'\)/);
   assert.match(catalog, /The product could not be \$\{editingId \? 'updated' : 'created'\}\. Review the fields and try again\./);
   assert.match(catalog, /toast\(friendlyMessage, 'error'\)/);
@@ -559,12 +559,12 @@ test('installer completion requirements are assignment scoped with Lead preceden
   const media = fs.readFileSync(new URL('../js/smartlock-calendar/media.js', import.meta.url), 'utf8');
   const bookingCalendar = fs.readFileSync(new URL('../dashboard/booking-schedules/index.js', import.meta.url), 'utf8');
   const bookingMedia = fs.readFileSync(new URL('../dashboard/booking-schedules/booking-media.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260823_installer_completion_owner.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/04_operations_and_bookings.sql', import.meta.url), 'utf8');
 
   assert.match(settings, /version:\s*2,\s*sets:\s*checklistSets/);
   assert.match(settings, /Service - \$\{String\(product\.sku/);
-  assert.match(assignments, /precedence\.has_lead|hasLead/);
-  assert.match(assignments, /mine\.role !== 'service'/);
+  assert.match(assignments, /allRoles\.includes\('lead'\)|precedence\.has_lead|hasLead/);
+  assert.match(assignments, /allRoles\.includes\('service'\)|mine\.role !== 'service'/);
   assert.match(bookingDetails, /completionPolicy\.allowed/);
   assert.match(media, /No media uploads are required for this assignment/);
   assert.match(bookingCalendar, /function useBookingWorkflowForDoor/);
@@ -589,7 +589,7 @@ test('installer profile shows date hired and safely renders the employee profile
   const page = fs.readFileSync(new URL('../smartlock-calendar.html', import.meta.url), 'utf8');
   const auth = fs.readFileSync(new URL('../js/smartlock-calendar/auth.js', import.meta.url), 'utf8');
   const sync = fs.readFileSync(new URL('../js/smartlock-calendar/sync.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260823_installer_profile_details.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/04_operations_and_bookings.sql', import.meta.url), 'utf8');
   assert.match(page, /id="profile-date-hired"/);
   assert.match(page, /id="profile-picture"/);
   assert.match(auth, /currentInstaller\.profile_picture_url/);
@@ -625,7 +625,7 @@ test('customer affiliate codes are company-scoped, generated, and explicitly edi
   const api = fs.readFileSync(new URL('../api/customer-affiliate-codes.js', import.meta.url), 'utf8');
   const page = fs.readFileSync(new URL('../dashboard/cs-customers.html', import.meta.url), 'utf8');
   const client = fs.readFileSync(new URL('../dashboard/cs-customers.js', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260822010000_generate_customer_affiliate_codes.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/01_core_tenancy.sql', import.meta.url), 'utf8');
 
   assert.match(api, /requireCompanyAccess\(req, supabase, companyId/);
   assert.match(api, /modules: \['Customer Service'\]/);
@@ -663,7 +663,7 @@ test('employee hierarchy supports levels one through seven across dependent modu
   const events = fs.readFileSync(new URL('../dashboard/events/index.html', import.meta.url), 'utf8');
   const attendance = fs.readFileSync(new URL('../dashboard/attendance-leaves.html', import.meta.url), 'utf8');
   const commissions = fs.readFileSync(new URL('../dashboard/sales-commissions.html', import.meta.url), 'utf8');
-  const migration = fs.readFileSync(new URL('../database/migrations/20260822020000_expand_employee_levels_to_seven.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../database/migrations/02_hr_and_employees.sql', import.meta.url), 'utf8');
 
   assert.match(directory, /id="new-emp-title"[^>]+required/);
   assert.match(directory, /<option value="7">7 - Owner \/ President<\/option>/);
