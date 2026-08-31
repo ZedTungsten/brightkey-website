@@ -4,12 +4,21 @@
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const VIDEO_PATTERN = /\.(mp4|mov|webm|m4v)(?:\?|$)/i;
   const SAFE_MEDIA_PATTERN = /^(https?:\/\/|data:image\/(?:png|jpeg|gif|webp);base64,|data:video\/(?:mp4|webm);base64,)/i;
+  const PAGE_SIZE = 10;
+  const BOOKING_BATCH_SIZE = 100;
+  const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 
   const state = {
     companyId: null,
     month: new Date().getMonth(),
     year: new Date().getFullYear(),
-    rows: []
+    allRows: [],
+    filteredRows: [],
+    rows: [],
+    page: 0,
+    loadToken: 0,
+    mediaObserver: null,
+    zipPromise: null
   };
 
   const getSb = () => window.BKAuth.sb;
@@ -40,6 +49,9 @@
     if (display) display.textContent = `${MONTHS[state.month]} ${state.year}`;
     const nextHash = `#${String(state.month + 1).padStart(2, '0')}-${state.year}`;
     if (window.location.hash !== nextHash) history.replaceState(null, '', nextHash);
+    document.querySelectorAll('[data-media-tab]').forEach(link => {
+      link.href = `/dashboard/marketing-media/${link.dataset.mediaTab}${nextHash}`;
+    });
   }
 
   function monthRange() {
@@ -77,7 +89,14 @@
     const sku = Array.isArray(door?.products) ? door.products.find(Boolean) : null;
     if (sku) {
       const title = lookup.get(String(sku).toUpperCase());
-      return title && title !== sku ? `${sku} — ${title}` : sku;
+      if (title && title !== sku) {
+        const escapedSku = String(sku).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const productTitle = String(title).replace(new RegExp(`^${escapedSku}\\s*[-–—:|]\\s*`, 'i'), '').trim();
+        return productTitle && productTitle.toUpperCase() !== String(sku).toUpperCase()
+          ? `${sku} - ${productTitle}`
+          : sku;
+      }
+      return sku;
     }
     return `Device ${index + 1}`;
   }
@@ -100,6 +119,22 @@
         before: uniqueSafeUrls(Array.isArray(door?.photos) ? door.photos : []),
         after
       };
+    }).filter(row => row.before.length > 0 || row.after.length > 0);
+  }
+
+  function sortRows(rows) {
+    const compare = (left, right) => String(left || '').localeCompare(String(right || ''), 'en', {
+      sensitivity: 'base',
+      numeric: true
+    });
+    const nameOrder = (left, right) => compare(left.customer, right.customer)
+      || compare(left.orderNo, right.orderNo)
+      || compare(left.device, right.device);
+    const mode = document.getElementById('media-sort').value;
+    return rows.sort((left, right) => {
+      if (mode === 'date-desc') return compare(right.installedDate, left.installedDate) || nameOrder(left, right);
+      if (mode === 'date-asc') return compare(left.installedDate, right.installedDate) || nameOrder(left, right);
+      return nameOrder(left, right);
     });
   }
 
@@ -126,31 +161,101 @@
   }
 
   function mediaTile(url, index) {
-    const link = document.createElement('a');
-    link.className = 'media-tile';
-    link.href = url;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.setAttribute('aria-label', VIDEO_PATTERN.test(url) ? `Open video ${index + 1}` : `Open image ${index + 1}`);
-    if (VIDEO_PATTERN.test(url) || url.startsWith('data:video/')) {
+    const isVideo = VIDEO_PATTERN.test(url) || url.startsWith('data:video/');
+    const tile = document.createElement('button');
+    tile.className = 'media-tile';
+    tile.setAttribute('aria-label', isVideo ? `Preview video ${index + 1}` : `Open image ${index + 1}`);
+    if (isVideo) {
+      tile.classList.add('media-video-tile');
+      tile.type = 'button';
+      tile.addEventListener('click', () => openVideoPreview(url));
       const video = document.createElement('video');
-      video.src = url;
       video.muted = true;
-      video.preload = 'metadata';
-      link.appendChild(video);
+      video.preload = 'none';
+      video.dataset.src = url;
+      tile.appendChild(video);
       const badge = document.createElement('span');
       badge.className = 'media-tile-badge';
       badge.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="7 4 20 12 7 20 7 4"></polygon></svg>';
-      link.appendChild(badge);
+      tile.appendChild(badge);
     } else {
+      tile.type = 'button';
+      tile.classList.add('media-image-tile');
+      tile.addEventListener('click', () => openImagePreview(url));
       const image = document.createElement('img');
-      image.src = url;
       image.alt = `Installation media ${index + 1}`;
       image.loading = 'lazy';
-      image.addEventListener('error', () => link.remove());
-      link.appendChild(image);
+      image.dataset.src = url;
+      image.addEventListener('error', () => tile.remove());
+      tile.appendChild(image);
     }
-    return link;
+    return tile;
+  }
+
+  function openImagePreview(url) {
+    const modal = document.getElementById('media-image-modal');
+    const image = document.getElementById('media-image-preview');
+    const error = document.getElementById('media-image-error');
+    error.hidden = true;
+    image.hidden = false;
+    image.src = url;
+    modal.style.display = 'flex';
+    void modal.offsetHeight;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeImagePreview() {
+    const modal = document.getElementById('media-image-modal');
+    const image = document.getElementById('media-image-preview');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    image.removeAttribute('src');
+    setTimeout(() => { modal.style.display = 'none'; }, 150);
+  }
+
+  function openVideoPreview(url) {
+    const modal = document.getElementById('media-video-modal');
+    const player = document.getElementById('media-video-player');
+    const error = document.getElementById('media-video-error');
+    error.hidden = true;
+    player.hidden = false;
+    player.src = url;
+    modal.style.display = 'flex';
+    void modal.offsetHeight;
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    player.play().catch(() => {});
+  }
+
+  function closeVideoPreview() {
+    const modal = document.getElementById('media-video-modal');
+    const player = document.getElementById('media-video-player');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    player.pause();
+    player.removeAttribute('src');
+    player.load();
+    setTimeout(() => { modal.style.display = 'none'; }, 150);
+  }
+
+  function observeMedia() {
+    if (state.mediaObserver) state.mediaObserver.disconnect();
+    const media = document.querySelectorAll('.media-tile img[data-src], .media-tile video[data-src]');
+    if (!('IntersectionObserver' in window)) {
+      media.forEach(element => { element.src = element.dataset.src; delete element.dataset.src; });
+      return;
+    }
+    state.mediaObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const element = entry.target;
+        element.src = element.dataset.src;
+        delete element.dataset.src;
+        state.mediaObserver.unobserve(element);
+      });
+    }, { rootMargin: '160px' });
+    media.forEach(element => state.mediaObserver.observe(element));
   }
 
   function mediaSection(title, urls) {
@@ -160,10 +265,7 @@
     const label = document.createElement('span');
     label.className = 'media-section-title';
     label.textContent = title;
-    const count = document.createElement('span');
-    count.className = 'media-count';
-    count.textContent = `${urls.length} file${urls.length === 1 ? '' : 's'}`;
-    heading.append(label, count);
+    heading.appendChild(label);
     section.appendChild(heading);
     if (!urls.length) {
       const empty = document.createElement('div');
@@ -190,25 +292,18 @@
 
   function render() {
     const body = document.getElementById('media-table-body');
-    const query = document.getElementById('media-search').value.trim().toLowerCase();
-    const selectedId = document.getElementById('media-device-filter').value;
-    const rows = state.rows.filter(row => {
-      if (selectedId && row.id !== selectedId) return false;
-      if (!query) return true;
-      return [row.customer, row.orderNo, row.device].some(value => String(value || '').toLowerCase().includes(query));
-    });
     body.replaceChildren();
-    if (!rows.length) {
+    if (!state.rows.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
       cell.colSpan = 2;
       cell.className = 'media-empty-row';
-      cell.textContent = query ? 'No customer media matches this search.' : 'No installed devices found for this month.';
+      cell.textContent = state.allRows.length ? 'No customer media matches these filters.' : 'No installed devices found for this month.';
       row.appendChild(cell);
       body.appendChild(row);
       return;
     }
-    rows.forEach(item => {
+    state.rows.forEach(item => {
       const row = document.createElement('tr');
       const customerCell = document.createElement('td');
       const name = document.createElement('div');
@@ -228,16 +323,63 @@
       const mediaCell = document.createElement('td');
       const header = document.createElement('div');
       header.className = 'media-cell-header';
-      const total = document.createElement('span');
-      total.className = 'media-count';
-      total.textContent = `${item.before.length + item.after.length} total files`;
-      header.append(total, downloadButton(item));
+      header.appendChild(downloadButton(item));
       const sections = document.createElement('div');
       sections.className = 'media-sections';
       sections.append(mediaSection('Before Installation', item.before), mediaSection('After Installation', item.after));
       mediaCell.append(header, sections);
       row.append(customerCell, mediaCell);
       body.appendChild(row);
+    });
+    const spacer = document.createElement('tr');
+    spacer.className = 'table-spacer-row';
+    const spacerCell = document.createElement('td');
+    spacerCell.colSpan = 2;
+    spacer.appendChild(spacerCell);
+    body.appendChild(spacer);
+    observeMedia();
+  }
+
+  function paginationItems(totalPages, currentPage) {
+    if (totalPages <= 9) return Array.from({ length: totalPages }, (_, index) => index + 1);
+    const middleStart = Math.min(Math.max(currentPage - 1, 4), totalPages - 5);
+    const pages = [1, 2, 3, middleStart, middleStart + 1, middleStart + 2, totalPages - 2, totalPages - 1, totalPages];
+    return [...new Set(pages)].sort((a, b) => a - b).reduce((items, page, index, uniquePages) => {
+      if (index && page - uniquePages[index - 1] > 1) items.push('ellipsis');
+      items.push(page);
+      return items;
+    }, []);
+  }
+
+  function updatePagination() {
+    const previous = document.getElementById('media-prev-page');
+    const next = document.getElementById('media-next-page');
+    const status = document.getElementById('media-page-status');
+    const numbers = document.getElementById('media-page-numbers');
+    const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / PAGE_SIZE));
+    const start = state.filteredRows.length ? state.page * PAGE_SIZE + 1 : 0;
+    const end = Math.min(start + state.rows.length - 1, state.filteredRows.length);
+    previous.disabled = state.page === 0;
+    next.disabled = state.page >= totalPages - 1;
+    status.textContent = `${start}–${end} of ${state.filteredRows.length} · Page ${state.page + 1} of ${totalPages}`;
+    numbers.replaceChildren();
+    paginationItems(totalPages, state.page + 1).forEach(item => {
+      if (item === 'ellipsis') {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'media-page-ellipsis';
+        ellipsis.textContent = '…';
+        ellipsis.setAttribute('aria-hidden', 'true');
+        numbers.appendChild(ellipsis);
+        return;
+      }
+      const page = item - 1;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `media-page-number${page === state.page ? ' active' : ''}`;
+      button.dataset.page = String(page);
+      button.textContent = String(item);
+      if (page === state.page) button.setAttribute('aria-current', 'page');
+      numbers.appendChild(button);
     });
   }
 
@@ -247,15 +389,15 @@
     select.replaceChildren();
     const allOption = document.createElement('option');
     allOption.value = '';
-    allOption.textContent = 'All customers and devices';
+    allOption.textContent = 'All Customers';
     select.appendChild(allOption);
-    state.rows.forEach(row => {
+    state.allRows.forEach(row => {
       const option = document.createElement('option');
       option.value = row.id;
       option.textContent = `${row.customer} — ${row.orderNo} — ${row.device}`;
       select.appendChild(option);
     });
-    select.value = state.rows.some(row => row.id === selected) ? selected : '';
+    select.value = state.allRows.some(row => row.id === selected) ? selected : '';
   }
 
   function fileExtension(url, contentType) {
@@ -273,12 +415,9 @@
       toast('No media is available to download.', 'info');
       return;
     }
-    if (!window.JSZip) {
-      toast('The download tool is unavailable. Refresh and try again.', 'error');
-      return;
-    }
     button.disabled = true;
     try {
+      await loadZipLibrary();
       const zip = new window.JSZip();
       const failures = [];
       await Promise.all(urls.map(async (url, index) => {
@@ -311,26 +450,83 @@
     }
   }
 
-  async function loadRows() {
-    setLoading();
+  function loadZipLibrary() {
+    if (window.JSZip) return Promise.resolve();
+    if (state.zipPromise) return state.zipPromise;
+    state.zipPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = JSZIP_URL;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Download tool unavailable'));
+      document.head.appendChild(script);
+    }).catch(error => {
+      state.zipPromise = null;
+      throw error;
+    });
+    return state.zipPromise;
+  }
+
+  async function fetchBookingBatch(offset) {
     const range = monthRange();
+    const { data, error } = await getSb().from('installation_bookings')
+      .select('id, order_no, customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, scheduled_date, status, doors, products')
+      .eq('company_id', state.companyId)
+      .gte('scheduled_date', range.start)
+      .lt('scheduled_date', range.end)
+      .neq('status', 'cancelled')
+      .order('scheduled_date', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + BOOKING_BATCH_SIZE - 1);
+    if (error) throw error;
+    return data || [];
+  }
+
+  function showPage(page = state.page) {
+    const totalPages = Math.max(1, Math.ceil(state.filteredRows.length / PAGE_SIZE));
+    state.page = Math.min(Math.max(0, page), totalPages - 1);
+    const from = state.page * PAGE_SIZE;
+    state.rows = state.filteredRows.slice(from, from + PAGE_SIZE);
+    render();
+    updatePagination();
+    const scroll = document.querySelector('.media-table-scroll');
+    if (scroll) scroll.scrollTop = 0;
+  }
+
+  function applyFilters() {
+    const query = document.getElementById('media-search').value.trim().toLowerCase();
+    const selectedId = document.getElementById('media-device-filter').value;
+    state.filteredRows = sortRows(state.allRows.filter(row => {
+      if (selectedId && row.id !== selectedId) return false;
+      if (!query) return true;
+      return [row.customer, row.orderNo, row.device].some(value => String(value || '').toLowerCase().includes(query));
+    }));
+    showPage(0);
+  }
+
+  async function loadMonthRows() {
+    setLoading();
+    const token = ++state.loadToken;
     try {
-      const { data, error } = await getSb().from('installation_bookings')
-        .select('id, order_no, customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, scheduled_date, status, doors, products')
-        .eq('company_id', state.companyId)
-        .gte('scheduled_date', range.start)
-        .lt('scheduled_date', range.end)
-        .neq('status', 'cancelled')
-        .order('scheduled_date', { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      state.rows = (data || []).flatMap(bookingRows);
+      let bookingOffset = 0;
+      let reachedEnd = false;
+      while (!reachedEnd) {
+        const bookings = await fetchBookingBatch(bookingOffset);
+        if (token !== state.loadToken) return;
+        bookingOffset += bookings.length;
+        reachedEnd = bookings.length < BOOKING_BATCH_SIZE;
+        state.allRows.push(...bookings.flatMap(bookingRows));
+        if (!bookings.length) break;
+      }
+      sortRows(state.allRows);
       populateDeviceFilter();
-      render();
+      applyFilters();
     } catch (error) {
       console.error(error);
+      state.allRows = [];
+      state.filteredRows = [];
       state.rows = [];
       render();
+      updatePagination();
       toast('Customer media could not be loaded. Try again.', 'error');
     }
   }
@@ -340,11 +536,19 @@
     if (state.month < 0) { state.month = 11; state.year -= 1; }
     if (state.month > 11) { state.month = 0; state.year += 1; }
     updateMonthDisplay();
-    loadRows();
+    resetPagination();
+    loadMonthRows();
+  }
+
+  function resetPagination() {
+    state.page = 0;
+    state.allRows = [];
+    state.filteredRows = [];
+    state.rows = [];
   }
 
   async function init() {
-    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'owner', 'admin', 'Operations', 'Sales'], '../admin.html');
+    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'owner', 'admin', 'Operations', 'Sales'], '/admin.html');
     if (!authInfo) return;
     const { data: company, error } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
     if (error || !company?.id) {
@@ -356,10 +560,38 @@
     updateMonthDisplay();
     document.getElementById('media-prev-month').addEventListener('click', () => changeMonth(-1));
     document.getElementById('media-next-month').addEventListener('click', () => changeMonth(1));
-    document.getElementById('media-search').addEventListener('input', render);
-    document.getElementById('media-device-filter').addEventListener('change', render);
-    window.addEventListener('hashchange', () => { parseMonthHash(); updateMonthDisplay(); loadRows(); });
-    await loadRows();
+    document.getElementById('media-search').addEventListener('input', applyFilters);
+    document.getElementById('media-device-filter').addEventListener('change', applyFilters);
+    document.getElementById('media-sort').addEventListener('change', applyFilters);
+    document.getElementById('media-video-close').addEventListener('click', closeVideoPreview);
+    document.getElementById('media-video-modal').addEventListener('click', event => {
+      if (event.target === event.currentTarget) closeVideoPreview();
+    });
+    document.getElementById('media-video-player').addEventListener('error', () => {
+      document.getElementById('media-video-player').hidden = true;
+      document.getElementById('media-video-error').hidden = false;
+    });
+    document.getElementById('media-image-close').addEventListener('click', closeImagePreview);
+    document.getElementById('media-image-modal').addEventListener('click', event => {
+      if (event.target === event.currentTarget) closeImagePreview();
+    });
+    document.getElementById('media-image-preview').addEventListener('error', () => {
+      document.getElementById('media-image-preview').hidden = true;
+      document.getElementById('media-image-error').hidden = false;
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && document.getElementById('media-video-modal').classList.contains('open')) closeVideoPreview();
+      if (event.key === 'Escape' && document.getElementById('media-image-modal').classList.contains('open')) closeImagePreview();
+    });
+    document.getElementById('media-prev-page').addEventListener('click', () => showPage(state.page - 1));
+    document.getElementById('media-next-page').addEventListener('click', () => showPage(state.page + 1));
+    document.getElementById('media-page-numbers').addEventListener('click', event => {
+      const button = event.target.closest('[data-page]');
+      if (!button || button.disabled) return;
+      showPage(Number(button.dataset.page));
+    });
+    window.addEventListener('hashchange', () => { parseMonthHash(); updateMonthDisplay(); resetPagination(); loadMonthRows(); });
+    await loadMonthRows();
   }
 
   document.addEventListener('DOMContentLoaded', () => {

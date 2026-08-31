@@ -294,7 +294,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/global-promo" class="dash-nav-child" data-role="marketing">Promos</a>
-          <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a><a href="/dashboard/marketing-media" class="dash-nav-child" data-role="marketing">Media</a>
+          <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a><a href="/dashboard/marketing-media/customers" class="dash-nav-child" data-role="marketing">Media</a>
         </div>
       </div>
 
@@ -616,7 +616,6 @@
       window.addEventListener('resize', syncSidebarForViewport);
       syncSidebarForViewport();
     }
-
     // Resolve Active State based on current pathname
     const currentPath = window.location.pathname;
 
@@ -634,6 +633,7 @@
     }
 
     const sidebarRouteFamilies = {
+      '/dashboard/marketing-media/customers': ['/dashboard/marketing-media/products'],
       '/dashboard/pricing-strategy/calculator': [
         '/dashboard/pricing-strategy'
       ],

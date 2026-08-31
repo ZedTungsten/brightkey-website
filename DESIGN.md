@@ -145,6 +145,18 @@ page appear stuck. This rule is different from a deliberately fixed-height
 table, drawer, or modal body whose contents are explicitly intended to scroll
 inside their own region.
 
+### Every New Table Must Declare Its Scroll Owner
+
+Before creating a table, decide and document which element owns vertical
+scrolling. A page-flow table must leave vertical wheel and trackpad gestures to
+the page: its wrapper may use `overflow-x: auto`, but must use
+`overflow-y: hidden` and `overscroll-behavior-x: contain` instead of the
+two-axis `overflow: auto` / `overscroll-behavior: contain` combination. A
+viewport-contained table may own vertical scrolling only when the complete
+height chain is constrained with `min-height: 0` as described below. Test by
+scrolling while the pointer is over both a populated row and empty table space;
+the chosen scroll owner must move and no gesture may appear locked.
+
 **Bonus — prevent page jump on drawer open/close:** Save and restore the scroll container's `scrollTop` around the close transition, since removing a `position: fixed` overlay can trigger a layout reflow that resets scroll position:
 ```js
 function closeDrawer() {
