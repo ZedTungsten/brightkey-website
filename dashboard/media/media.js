@@ -217,10 +217,12 @@
   function openVideoPreview(url) {
     const modal = document.getElementById('media-video-modal');
     const player = document.getElementById('media-video-player');
+    const download = document.getElementById('media-video-download');
     const error = document.getElementById('media-video-error');
     error.hidden = true;
     player.hidden = false;
     player.src = url;
+    download.href = url;
     modal.style.display = 'flex';
     void modal.offsetHeight;
     modal.classList.add('open');
@@ -231,10 +233,12 @@
   function closeVideoPreview() {
     const modal = document.getElementById('media-video-modal');
     const player = document.getElementById('media-video-player');
+    const download = document.getElementById('media-video-download');
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     player.pause();
     player.removeAttribute('src');
+    download.removeAttribute('href');
     player.load();
     setTimeout(() => { modal.style.display = 'none'; }, 150);
   }
