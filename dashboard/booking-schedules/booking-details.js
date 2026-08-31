@@ -593,7 +593,7 @@
                 </label>
                 <label class="booking-door-spec-field">
                   <span class="booking-door-spec-label">Jamb Type</span>
-                  <select class="form-input" data-door-spec="jambMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'glass', 'gate', 'concrete'], jambMaterial)}</select>
+                  <select class="form-input" data-door-spec="jambMaterial">${window.bookingDoorSelectOptions(['wood', 'PVC', 'metal', 'aluminum', 'glass', 'gate', 'concrete'], jambMaterial)}</select>
                 </label>
                 <label class="booking-door-spec-field">
                   <span class="booking-door-spec-label">Swing</span>

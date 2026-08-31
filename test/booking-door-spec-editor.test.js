@@ -11,6 +11,7 @@ test('door type section uses one pencil action and three specification dropdowns
   assert.match(details, /M11 4H4a2 2 0 0 0-2 2v14/);
   assert.match(details, /data-door-spec="doorMaterial"/);
   assert.match(details, /\['wood', 'PVC', 'metal', 'aluminum', 'glass', 'gate', 'concrete'\]/);
+  assert.match(details, /data-door-spec="jambMaterial">\$\{window\.bookingDoorSelectOptions\(\['wood', 'PVC', 'metal', 'aluminum', 'glass', 'gate', 'concrete'\]/);
   assert.match(details, /data-door-spec="jambMaterial"/);
   assert.match(details, /data-door-spec="swing"/);
   assert.match(details, />Save<\/button>/);

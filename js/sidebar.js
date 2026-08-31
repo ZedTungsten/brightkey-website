@@ -294,7 +294,7 @@
         </button>
         <div class="dash-nav-children">
           <a href="/dashboard/global-promo" class="dash-nav-child" data-role="marketing">Promos</a>
-          <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a>
+          <a href="/dashboard/marketing-logs" class="dash-nav-child" data-role="marketing">Logs Tracker</a><a href="/dashboard/marketing-media" class="dash-nav-child" data-role="marketing">Media</a>
         </div>
       </div>
 
