@@ -100,6 +100,53 @@
       return hardwareProducts[doorIndex]?.cancelled === true;
     }
 
+    function getCalendarBookingDoorState(booking) {
+      let doors = [];
+      let products = [];
+      let bookingInstallers = [];
+      if (Array.isArray(booking?.doors)) doors = booking.doors;
+      else if (typeof booking?.doors === 'string') {
+        try { doors = JSON.parse(booking.doors); } catch (_) {}
+      }
+      if (Array.isArray(booking?.products)) products = booking.products;
+      else if (typeof booking?.products === 'string') {
+        try { products = JSON.parse(booking.products); } catch (_) {}
+      }
+      if (Array.isArray(booking?.installers)) bookingInstallers = booking.installers;
+      else if (typeof booking?.installers === 'string') {
+        try { bookingInstallers = JSON.parse(booking.installers); } catch (_) {}
+      }
+
+      const activeDoors = doors.filter((door, doorIndex) => (
+        !isDoorCancelledForCompletion(door, doorIndex, doors, products)
+      ));
+      const hasDoorAssignments = doors.some(door => (
+        Array.isArray(door?.installers) && door.installers.some(installer => installer?.id || installer?.name)
+      ));
+      const installers = hasDoorAssignments
+        ? activeDoors.flatMap(door => Array.isArray(door?.installers) ? door.installers : [])
+        : bookingInstallers;
+      const installerNames = [];
+      const seenInstallers = new Set();
+      installers.forEach(installer => {
+        const employee = installer?.id ? dbEmployees.find(item => item.id === installer.id) : null;
+        const name = String(installer?.name || [employee?.first_name, employee?.last_name].filter(Boolean).join(' ')).trim();
+        const key = String(installer?.id || name).toLowerCase();
+        if (!name || seenInstallers.has(key)) return;
+        seenInstallers.add(key);
+        installerNames.push(name);
+      });
+
+      return {
+        doors,
+        products,
+        hideFromCalendar: doors.length > 0 && activeDoors.length === 0,
+        installerName: hasDoorAssignments
+          ? installerNames.join(', ')
+          : (installerNames.join(', ') || String(booking?.installer_name || '').trim())
+      };
+    }
+
     let currentYear = todayYear;
     let currentMonth = todayMonth;
 
@@ -756,7 +803,9 @@
         const isOutsideMonth = cellDate.getFullYear() !== currentYear || cellDate.getMonth() !== currentMonth;
         
         // Filter bookings scheduled for this date (from our searched list)
-        const dayBookings = filteredCalendarBookings.filter(b => b.scheduled_date === dateStr);
+        const dayBookings = filteredCalendarBookings.filter(b => (
+          b.scheduled_date === dateStr && !getCalendarBookingDoorState(b).hideFromCalendar
+        ));
         const dayEvents = filteredCalendarDayEvents.filter(event => event.date === dateStr);
 
         let amHtml = '';
@@ -770,22 +819,10 @@
           const displayText = `${escapeHtml(b.customer_name)} (${escapeHtml(cityStr)})${alertIcon}`;
           const isAborted = b.status === 'cancelled';
           
-          let doorsArr = [];
-          if (b.doors) {
-            if (typeof b.doors === 'string') {
-              try { doorsArr = JSON.parse(b.doors); } catch(_) {}
-            } else if (Array.isArray(b.doors)) {
-              doorsArr = b.doors;
-            }
-          }
-          let productsArr = [];
-          if (b.products) {
-            if (typeof b.products === 'string') {
-              try { productsArr = JSON.parse(b.products); } catch(_) {}
-            } else if (Array.isArray(b.products)) {
-              productsArr = b.products;
-            }
-          }
+          const calendarDoorState = getCalendarBookingDoorState(b);
+          const doorsArr = calendarDoorState.doors;
+          const productsArr = calendarDoorState.products;
+          const calendarInstallerName = calendarDoorState.installerName;
 
           const allocatedSkus = new Set();
           const anyDoorHasProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
@@ -859,9 +896,9 @@
             : (isFullyDone 
                 ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
                      ${isDayOff ? '' : `<span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>`}
-                     ${b.installer_name ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''}
+                     ${calendarInstallerName ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''}
                    </div>`
-                : (b.installer_name ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(b.installer_name))}</span>` : ''));
+                : (calendarInstallerName ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''));
 
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `

@@ -23,6 +23,21 @@
     .adjustments-empty { padding: 2.5rem 1rem; color: var(--text-muted); text-align: center; font-size: 0.82rem; }
     .adjustment-modal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .adjustment-modal-grid .span-2 { grid-column: 1 / -1; }
+    .eligibility-section-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: 0.5rem; margin-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+    .eligibility-section-header h3 { margin: 0; color: var(--text-primary); font-size: 0.95rem; font-weight: 700; }
+    .eligibility-add-btn { flex-shrink: 0; color: #fff; background: var(--cyan); border-color: var(--cyan); }
+    .eligibility-add-btn:hover { color: #fff; background: var(--cyan-light); border-color: var(--cyan-light); }
+    .eligibility-table-wrap { width: 100%; max-width: 820px; align-self: flex-start; overflow-x: hidden; border: 1px solid var(--border); border-radius: 8px; }
+    .eligibility-table { width: 100%; min-width: 0; border-collapse: collapse; table-layout: fixed; }
+    .eligibility-table th,
+    .eligibility-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+    .eligibility-table th { background: var(--bg-elevated); color: var(--text-muted); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .eligibility-table tbody tr:last-child td { border-bottom: 0; }
+    .eligibility-table .form-select { width: 100%; min-height: 34px; height: auto; padding: 0.45rem 0.65rem; line-height: 1.2; font-size: 0.78rem; font-weight: 400; }
+    .eligibility-table .eligibility-action-cell { width: 48px; text-align: center; }
+    .eligibility-table .eligibility-delete-btn { width: 30px; height: 30px; padding: 0; color: var(--danger); border: 0; background: transparent; }
+    .eligibility-table .eligibility-delete-btn:hover { color: var(--danger); background: rgba(239, 68, 68, 0.08); }
+    .eligibility-table .eligibility-delete-btn svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     @media (max-width: 680px) {
       .adjustment-modal-grid { grid-template-columns: 1fr; }
       .adjustment-modal-grid .span-2 { grid-column: auto; }
@@ -44,6 +59,7 @@
         <span class="top-bar-title">Company Settings</span>
         <div style="flex:1;"></div>
         <span id="topbar-date" style="font-size: 0.85rem; font-weight: 500; color: var(--text-secondary);"></span>
+        <button type="button" class="btn btn-primary" onclick="saveCommissionsSettings()">Save Settings</button>
       </div>
 
       <div class="content-area" style="height: calc(100vh - 56px); overflow: hidden;">
@@ -67,7 +83,6 @@
             <div class="tab-panel active">
               <div class="panel-header">
                 <div class="panel-title">Commissions Configuration</div>
-                <button class="btn btn-primary" onclick="saveCommissionsSettings()">Save Commissions</button>
               </div>
               <div class="table-scroll">
                 
@@ -105,16 +120,27 @@
 
                 <!-- Section: Commission Eligibility -->
                 <div class="wh-card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 1.5rem;">
-                  <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">Commission Eligibility</h3>
+                  <div class="eligibility-section-header">
+                    <h3>Commission Eligibility</h3>
+                    <button type="button" class="btn btn-sm eligibility-add-btn" onclick="addEligibilityRow()">+ Add Eligibility</button>
+                  </div>
                   
-                  <!-- Container for dynamically added eligibility rows -->
-                  <div id="eligibility-rows-container" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    <!-- Rows will be added here -->
+                  <div class="eligibility-table-wrap">
+                    <table class="eligibility-table">
+                      <thead>
+                        <tr>
+                          <th>Business / Tag</th>
+                          <th>Product Category</th>
+                          <th>SKU</th>
+                          <th class="eligibility-action-cell">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody id="eligibility-rows-container">
+                        <!-- Rows will be added here -->
+                      </tbody>
+                    </table>
                   </div>
 
-                  <div>
-                    <button class="btn btn-outline btn-sm" onclick="addEligibilityRow()">+ Add Eligibility</button>
-                  </div>
                 </div>
 
                 <!-- Section: Commission Rate -->
@@ -278,20 +304,18 @@
       const row = document.getElementById(rowId);
       if (!row) return;
       const val = row.querySelector('.el-row-business-tag').value;
-      const catContainer = row.querySelector('.el-row-category-container');
-      const skuContainer = row.querySelector('.el-row-sku-container');
       const catSelect = row.querySelector('.el-row-category');
       const skuSelect = row.querySelector('.el-row-sku');
 
       if (!val.startsWith('biz:')) {
-        catContainer.style.display = 'none';
-        skuContainer.style.display = 'none';
+        catSelect.style.display = 'none';
+        skuSelect.style.display = 'none';
         catSelect.value = 'all';
         skuSelect.value = 'all';
       } else {
         const biz = val.replace('biz:', '');
-        catContainer.style.display = 'block';
-        skuContainer.style.display = 'none';
+        catSelect.style.display = 'block';
+        skuSelect.style.display = 'none';
         skuSelect.value = 'all';
         
         const products = window.commissionsProductsData || [];
@@ -318,14 +342,13 @@
       const bizVal = row.querySelector('.el-row-business-tag').value;
       const biz = bizVal.replace('biz:', '');
       const cat = row.querySelector('.el-row-category').value;
-      const skuContainer = row.querySelector('.el-row-sku-container');
       const skuSelect = row.querySelector('.el-row-sku');
 
       if (cat === 'all') {
-        skuContainer.style.display = 'none';
+        skuSelect.style.display = 'none';
         skuSelect.value = 'all';
       } else {
-        skuContainer.style.display = 'block';
+        skuSelect.style.display = 'block';
         
         const products = window.commissionsProductsData || [];
         const unavailableSkus = getUnavailableEligibilitySkus(rowId, biz, cat);
@@ -454,29 +477,28 @@
       }
 
       const html = `
-        <div class="eligibility-row" id="${rowId}" style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; margin-bottom: 0.5rem; width: 100%;">
-          <div class="form-group" style="flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-            <label class="form-label" style="font-size: 0.65rem;">Business / Tag</label>
+        <tr class="eligibility-row" id="${rowId}">
+          <td>
             <select class="form-select el-row-business-tag" onchange="onElRowBusinessChange('${rowId}')">
               ${dropdownOptionsHtml}
             </select>
-          </div>
-          <div class="form-group el-row-category-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-            <label class="form-label" style="font-size: 0.65rem;">Product Category</label>
-            <select class="form-select el-row-category" onfocus="refreshEligibilityRowOptions('${rowId}')" onchange="onElRowCategoryChange('${rowId}')">
+          </td>
+          <td class="el-row-category-container">
+            <select class="form-select el-row-category" style="display: none;" onfocus="refreshEligibilityRowOptions('${rowId}')" onchange="onElRowCategoryChange('${rowId}')">
               <option value="all">All Categories</option>
             </select>
-          </div>
-          <div class="form-group el-row-sku-container" style="display: none; flex: 1; min-width: 150px; max-width: calc(33.333% - 0.67rem);">
-            <label class="form-label" style="font-size: 0.65rem;">SKU</label>
-            <select class="form-select el-row-sku" onfocus="refreshEligibilityRowOptions('${rowId}')">
+          </td>
+          <td class="el-row-sku-container">
+            <select class="form-select el-row-sku" style="display: none;" onfocus="refreshEligibilityRowOptions('${rowId}')">
               <option value="all">All SKUs</option>
             </select>
-          </div>
-          <button class="btn btn-outline btn-sm" style="color: var(--danger); border-color: rgba(220,38,38,0.15); height: 38px; margin-top: 1.25rem;" onclick="removeEligibilityRow('${rowId}')">
-            <svg viewBox="0 0 24 24" style="width:12px;height:12px;display:block;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
+          </td>
+          <td class="eligibility-action-cell">
+            <button type="button" class="btn eligibility-delete-btn" onclick="removeEligibilityRow('${rowId}')" title="Remove eligibility" aria-label="Remove eligibility">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>
+            </button>
+          </td>
+        </tr>
       `;
 
       container.insertAdjacentHTML('beforeend', html);
@@ -801,9 +823,9 @@
           rule.scope = 'businesses';
           rule.business = val.replace('biz:', '');
           const catSelect = row.querySelector('.el-row-category');
-          rule.category = (catSelect && row.querySelector('.el-row-category-container').style.display !== 'none') ? catSelect.value : 'all';
+          rule.category = (catSelect && catSelect.style.display !== 'none') ? catSelect.value : 'all';
           const skuSelect = row.querySelector('.el-row-sku');
-          rule.sku = (skuSelect && row.querySelector('.el-row-sku-container').style.display !== 'none') ? skuSelect.value : 'all';
+          rule.sku = (skuSelect && skuSelect.style.display !== 'none') ? skuSelect.value : 'all';
         } else if (val.startsWith('tag:')) {
           rule.scope = 'tags';
           rule.tag = val.replace('tag:', '');
@@ -938,20 +960,36 @@
       if (!select) return;
       
       try {
-        const { data } = await sb
-          .from('employees')
-          .select('id, first_name, last_name')
-          .eq('company_id', currentCompanyId);
+        const [membersResult, employeesResult] = await Promise.all([
+          sb.from('tenant_members')
+            .select('user_email, accessible_modules')
+            .eq('tenant_id', currentTenantId),
+          sb.from('employees')
+            .select('id, first_name, last_name, email')
+            .eq('company_id', currentCompanyId)
+        ]);
+
+        if (membersResult.error) throw membersResult.error;
+        if (employeesResult.error) throw employeesResult.error;
+
+        const salesMemberEmails = new Set((membersResult.data || [])
+          .filter(member => (member.accessible_modules || []).some(moduleName =>
+            String(moduleName).split(':')[0].trim().toLowerCase() === 'sales'
+          ))
+          .map(member => String(member.user_email || '').trim().toLowerCase())
+          .filter(Boolean));
+
+        const salesEmployees = (employeesResult.data || [])
+          .filter(employee => salesMemberEmails.has(String(employee.email || '').trim().toLowerCase()))
+          .sort((a, b) => `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`));
           
         select.innerHTML = '<option value="">-- Select Employee --</option>';
-        if (data) {
-          data.forEach(emp => {
-            const opt = document.createElement('option');
-            opt.value = emp.id;
-            opt.textContent = `${emp.first_name} ${emp.last_name}`;
-            select.appendChild(opt);
-          });
-        }
+        salesEmployees.forEach(emp => {
+          const opt = document.createElement('option');
+          opt.value = emp.id;
+          opt.textContent = `${emp.first_name} ${emp.last_name}`;
+          select.appendChild(opt);
+        });
       } catch(e) {
         console.error('Failed to populate sales managers dropdown:', e);
       }

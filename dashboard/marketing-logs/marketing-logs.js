@@ -9,6 +9,7 @@
   
   let currentDate = new Date();
   let logsList = [];
+  let pendingDeletionId = null;
   const editRowStates = {}; // key: logId (or tempId), value: editData object
 
   // Standard escape helper
@@ -150,7 +151,7 @@
         .gte('date', startOfMonth)
         .lte('date', endOfMonth)
         .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: true });
 
       if (error) throw error;
       logsList = data || [];
@@ -189,7 +190,9 @@
         starred: false
       }];
 
-      rowsForDate.forEach(log => {
+      rowsForDate.forEach((log, rowIndex) => {
+        const isFirstRowForDate = rowIndex === 0;
+        const isLastRowForDate = rowIndex === rowsForDate.length - 1;
         const tr = document.createElement('tr');
         tr.dataset.logId = log.id || '';
         tr.dataset.date = dateString;
@@ -204,7 +207,7 @@
         const badgeKey = log.id || `new-${dateString}`;
 
         tr.innerHTML = `
-        <td class="cell-date">${formatLogDate(dateString)}</td>
+        <td class="cell-date ${isFirstRowForDate ? 'date-group-first' : 'date-group-continuation'} ${isLastRowForDate ? 'date-group-last' : ''}">${isFirstRowForDate ? formatLogDate(dateString) : ''}</td>
         <td class="cell-user"><div class="user-badge" data-log-key="${badgeKey}" style="${initials ? '' : 'display: none;'}">${initials}</div></td>
         <td>
           <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'item', this.value, this)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
@@ -220,9 +223,11 @@
         </td>
         <td>
           <div class="action-btn-group">
-            <button type="button" class="action-icon-btn add-row-btn" onclick="addMarketingLogRow(event, '${dateString}')" title="Add another item for this date" aria-label="Add another item for this date">
+            ${isFirstRowForDate ? `<button type="button" class="action-icon-btn add-row-btn" onclick="addMarketingLogRow(event, '${dateString}')" title="Add another item for this date" aria-label="Add another item for this date">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            </button>
+            </button>` : `<button type="button" class="action-icon-btn remove-row-btn" onclick="removeMarketingLogRow(event, '${logId}')" title="Remove this row" aria-label="Remove this row">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>`}
             <button type="button" class="action-icon-btn star-btn ${log.starred ? 'active' : ''}" onclick="toggleStarRow(event, '${dateString}', '${logId}', ${log.starred})" title="Star Highlight" aria-label="Star highlight">
               <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="${log.starred ? 'currentColor' : 'none'}"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
             </button>
@@ -269,14 +274,14 @@
         const wouldBeEmpty = !existing.item && !existing.change_desc && !existing.reason && !existing.learning && !existing.starred;
 
         if (wouldBeEmpty) {
-          const { error } = await sb.from('marketing_logs').delete().eq('id', existing.id);
+          const { error } = await sb.from('marketing_logs')
+            .delete()
+            .eq('id', existing.id)
+            .eq('company_id', companyId);
           if (error) throw error;
-          // Remove from local logs list immediately
           logsList = logsList.filter(l => l.id !== existing.id);
-          if (row) {
-            row.dataset.logId = '';
-            row.querySelector('.user-badge')?.setAttribute('style', 'display: none;');
-          }
+          renderTable();
+          return;
         } else {
           const payload = {
             [field]: newVal,
@@ -414,6 +419,72 @@
       showToast('Could not add another item for this date.', true);
     }
   };
+
+  function rowHasText(log) {
+    return ['item', 'change_desc', 'reason', 'learning'].some(field => String(log?.[field] || '').trim());
+  }
+
+  async function deleteMarketingLogRow(logId) {
+    try {
+      const { error } = await sb.from('marketing_logs')
+        .delete()
+        .eq('id', logId)
+        .eq('company_id', companyId);
+      if (error) throw error;
+      logsList = logsList.filter(log => log.id !== logId);
+      showToast('Row removed.');
+      renderTable();
+    } catch (err) {
+      console.error(err);
+      showToast('Could not remove this row.', true);
+    }
+  }
+
+  window.removeMarketingLogRow = function(e, logId) {
+    e.stopPropagation();
+    const log = logsList.find(item => item.id === logId);
+    if (!log) {
+      renderTable();
+      return;
+    }
+
+    if (!rowHasText(log)) {
+      deleteMarketingLogRow(logId);
+      return;
+    }
+
+    pendingDeletionId = logId;
+    const modal = document.getElementById('delete-row-modal');
+    modal.style.display = 'flex';
+    modal.offsetHeight;
+    modal.classList.add('open');
+    modal.querySelector('.delete-row-cancel-btn')?.focus();
+  };
+
+  window.closeDeleteRowModal = function() {
+    pendingDeletionId = null;
+    const modal = document.getElementById('delete-row-modal');
+    modal.classList.remove('open');
+    setTimeout(() => {
+      modal.style.display = 'none';
+    }, 150);
+  };
+
+  window.confirmDeleteMarketingLogRow = async function() {
+    const logId = pendingDeletionId;
+    window.closeDeleteRowModal();
+    if (logId) await deleteMarketingLogRow(logId);
+  };
+
+  window.handleDeleteRowBackdrop = function(e) {
+    if (e.target.id === 'delete-row-modal') window.closeDeleteRowModal();
+  };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('delete-row-modal')?.classList.contains('open')) {
+      window.closeDeleteRowModal();
+    }
+  });
 
   window.clearRow = async function(e, dateString) {
     e.stopPropagation();

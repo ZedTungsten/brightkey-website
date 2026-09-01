@@ -649,9 +649,9 @@ test('employee profile shows the saved CV link directly below the ID link', () =
   assert.match(profile, /cvLink\.rel = 'noopener noreferrer'/);
 });
 
-test('employee directory result count and pagination render below the table', () => {
+test('employee directory result count and pagination render inside the table card', () => {
   const directory = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
-  assert.ok(directory.indexOf('<!-- Close table-card -->') < directory.indexOf('id="footer-info"'));
+  assert.ok(directory.indexOf('id="footer-info"') < directory.indexOf('<!-- Close table-card -->'));
   assert.ok(directory.indexOf('id="footer-info"') < directory.indexOf('id="pagination"'));
   assert.match(directory, /class="table-footer directory-table-footer"/);
 });
