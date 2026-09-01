@@ -163,6 +163,7 @@
       const allBookingsSearch = document.getElementById('all-bookings-search');
       const scrollContainer = document.querySelector('.scroll-container');
       const pageTitle = document.getElementById('booking-page-title');
+      const createNoteButton = document.getElementById('create-installer-note');
       const issueToolButton = document.getElementById('issue-tool-button');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
@@ -182,6 +183,7 @@
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
       if (scheduleTabs) scheduleTabs.classList.toggle('booking-controls-active', showsBookingControls);
       if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
+      if (installerTabs) installerTabs.classList.toggle('installer-notes-active', isInstallerNotes);
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
       if (tabInstallerNotes) tabInstallerNotes.classList.toggle('active', isInstallerNotes);
@@ -191,8 +193,10 @@
       if (scrollContainer) scrollContainer.classList.toggle('installer-notes-active', isInstallerNotes);
       if (scrollContainer) scrollContainer.classList.toggle('booking-controls-active', showsBookingControls);
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
+      if (createNoteButton) createNoteButton.style.display = isInstallerNotes ? 'inline-flex' : 'none';
       if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
       document.body.classList.toggle('booking-all-bookings-page', currentSubpage === 'all-bookings');
+      document.body.classList.toggle('installer-notes-page', isInstallerNotes);
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
         : 'Installation Schedules — Brightkey Admin';

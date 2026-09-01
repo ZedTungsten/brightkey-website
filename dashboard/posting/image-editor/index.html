@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
-  <link rel="stylesheet" href="/dashboard/posting/image-editor/image-editor.css?v=20260831-3" />
+  <link rel="stylesheet" href="/dashboard/posting/image-editor/image-editor.css?v=20260831-10" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 </head>
 <body class="posting-page">
@@ -20,6 +20,12 @@
       </nav>
 
       <main class="editor-layout">
+        <aside class="editor-layers" aria-label="Canvas layers">
+          <header><span class="tool-kicker">Layers</span></header>
+          <div class="layers-list" id="layers-list" aria-label="Image layers">
+            <p class="layers-empty">Uploaded images will appear here.</p>
+          </div>
+        </aside>
         <section class="editor-workspace" aria-label="Image canvas editor">
           <div class="editor-toolbar">
             <label id="upload-label" class="btn btn-primary upload-button disabled" for="source-images" aria-disabled="true">Upload images</label>
@@ -34,7 +40,10 @@
               <strong>Create a canvas first</strong>
               <span>Set the output width and height before uploading images.</span>
             </div>
-            <canvas id="editor-canvas" width="1080" height="1080" aria-label="Image preview canvas"></canvas>
+            <div class="editor-canvas-frame" id="editor-canvas-frame">
+              <canvas id="editor-canvas" width="1080" height="1080" aria-label="Image preview canvas"></canvas>
+              <canvas id="image-interaction-canvas" aria-hidden="true"></canvas>
+            </div>
             <div class="canvas-zoom" id="canvas-zoom" hidden>
               <button id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></button>
               <input id="zoom-slider" type="range" min="25" max="200" step="5" value="100" orient="vertical" aria-label="Canvas zoom" />
@@ -42,19 +51,44 @@
               <output id="zoom-value">100%</output>
             </div>
           </div>
-
-          <div class="image-strip" id="image-strip" aria-label="Uploaded images"></div>
         </section>
 
         <aside class="editor-sidebar" aria-label="Image editor tools">
           <section class="tool-section">
             <div class="tool-heading"><div><span class="tool-kicker">Canvas</span><h2>Canvas size</h2></div><span id="canvas-size-label">Not set</span></div>
             <button id="open-size-modal" type="button" class="tool-action">Create custom size<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
+            <div class="canvas-save-actions">
+              <button id="open-save-canvas-modal" type="button" class="btn btn-cyan" disabled>Save Canvas</button>
+              <button id="open-load-canvas-modal" type="button" class="btn btn-cyan">Load</button>
+            </div>
           </section>
           <section class="tool-section">
             <span class="tool-kicker">Overlays</span>
             <button id="open-watermark-modal" type="button" class="tool-action">Watermark<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
             <button id="open-template-modal" type="button" class="tool-action">Template<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button>
+          </section>
+          <section class="tool-section image-properties" id="image-properties" aria-disabled="true">
+            <span class="tool-kicker">Image Properties</span>
+            <div class="image-property-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"></path></svg>
+              <div><strong>Dimensions</strong><span id="image-dimensions-value">No image selected</span></div>
+              <button type="button" class="property-reset" id="reset-image-dimensions" disabled>Reset</button>
+            </div>
+            <div class="image-property-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66"></path><path d="M20 4v7h-7"></path></svg>
+              <div><strong>Rotation</strong><span id="image-rotation-value">0°</span></div>
+              <button type="button" class="property-reset" id="reset-image-rotation" disabled>Reset</button>
+            </div>
+            <div class="image-property-row image-opacity-row">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3s7 6.2 7 11a7 7 0 0 1-14 0c0-4.8 7-11 7-11Z"></path></svg>
+              <div><strong>Opacity</strong><span id="image-opacity-value">100%</span></div>
+              <button type="button" class="property-reset" id="reset-image-opacity" disabled>Reset</button>
+              <input id="image-opacity" type="range" min="0" max="100" value="100" disabled aria-label="Image opacity" />
+            </div>
+            <div class="image-flip-actions" aria-label="Flip image">
+              <button type="button" id="flip-image-horizontal" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M4 7l5 5-5 5M20 7l-5 5 5 5"></path></svg><span>Horizontal</span></button>
+              <button type="button" id="flip-image-vertical" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M7 4l5 5 5-5M7 20l5-5 5 5"></path></svg><span>Vertical</span></button>
+            </div>
           </section>
           <section class="tool-section">
             <label class="tool-label" for="background-hex">Background color</label>
@@ -71,8 +105,27 @@
   <div class="editor-modal" id="size-modal" aria-hidden="true">
     <div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="size-title">
       <header><div><h2 id="size-title">Create canvas</h2><p>Enter the output size in pixels.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header>
-      <div class="modal-content"><div class="size-grid"><label>Width<input id="canvas-width" type="number" min="100" max="8000" value="1080" /></label><span>×</span><label>Height<input id="canvas-height" type="number" min="100" max="8000" value="1080" /></label></div><p class="field-error" id="size-error" hidden>Use dimensions from 100 to 8000 pixels.</p></div>
+      <div class="modal-content"><div class="size-grid"><label>Width<input id="canvas-width" type="number" min="100" max="8000" value="1080" /></label><span>×</span><label>Height<input id="canvas-height" type="number" min="100" max="8000" value="1080" /></label></div><p class="field-error" id="size-error" hidden>Use dimensions from 100 to 8000 pixels.</p><section class="size-saved-section"><h3>Load canvas</h3><div class="size-saved-list" id="size-saved-canvases"><div class="size-saved-state"><span class="spinner-cyan"></span><span>Loading saved canvases...</span></div></div></section></div>
       <footer><button class="btn btn-outline" type="button" data-close-modal>Cancel</button><button id="create-canvas" class="btn btn-success" type="button">Create</button></footer>
+    </div>
+  </div>
+
+  <div class="editor-modal" id="save-canvas-modal" aria-hidden="true">
+    <div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="save-canvas-title">
+      <header><div><h2 id="save-canvas-title">Save Canvas</h2><p>Name this canvas so it can be loaded later.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header>
+      <div class="modal-content">
+        <label class="editor-field" for="saved-canvas-name"><span>Canvas name <span class="required">*</span></span><input id="saved-canvas-name" type="text" maxlength="120" placeholder="Enter canvas name" autocomplete="off" /></label>
+        <p class="field-error" id="save-canvas-error" hidden>Enter a canvas name.</p>
+      </div>
+      <footer><button class="btn btn-outline" type="button" data-close-modal>Cancel</button><button id="save-canvas" class="btn btn-cyan" type="button">Save Canvas</button></footer>
+    </div>
+  </div>
+
+  <div class="editor-modal" id="load-canvas-modal" aria-hidden="true">
+    <div class="editor-modal-card saved-canvases-modal-card" role="dialog" aria-modal="true" aria-labelledby="load-canvas-title">
+      <header><div><h2 id="load-canvas-title">Load Canvas</h2><p>Select a saved canvas to reopen.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header>
+      <div class="saved-canvases-list" id="saved-canvases-list"><div class="saved-canvases-state"><span class="spinner-cyan"></span><span>Loading saved canvases...</span></div></div>
+      <footer><button class="btn btn-outline" type="button" data-close-modal>Close</button></footer>
     </div>
   </div>
 
@@ -97,6 +150,6 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
-  <script src="/dashboard/posting/image-editor/image-editor.js?v=20260831-2"></script>
+  <script src="/dashboard/posting/image-editor/image-editor.js?v=20260831-17"></script>
 </body>
 </html>

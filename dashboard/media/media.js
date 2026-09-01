@@ -472,15 +472,13 @@
 
   async function fetchBookingBatch(offset) {
     const range = monthRange();
-    const { data, error } = await getSb().from('installation_bookings')
-      .select('id, order_no, customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, scheduled_date, status, doors, products')
-      .eq('company_id', state.companyId)
-      .gte('scheduled_date', range.start)
-      .lt('scheduled_date', range.end)
-      .neq('status', 'cancelled')
-      .order('scheduled_date', { ascending: false })
-      .order('id', { ascending: false })
-      .range(offset, offset + BOOKING_BATCH_SIZE - 1);
+    const { data, error } = await getSb().rpc('get_shared_media_bookings', {
+      p_company_id: state.companyId,
+      p_start_date: range.start,
+      p_end_date: range.end,
+      p_offset: offset,
+      p_limit: BOOKING_BATCH_SIZE
+    });
     if (error) throw error;
     return data || [];
   }
@@ -552,7 +550,7 @@
   }
 
   async function init() {
-    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'owner', 'admin', 'Operations', 'Sales'], '/admin.html');
+    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'Sales'], '/admin.html');
     if (!authInfo) return;
     const { data: company, error } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
     if (error || !company?.id) {

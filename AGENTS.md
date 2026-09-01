@@ -89,6 +89,43 @@ We enforce rigorous practices to prevent SQL injections (SQLi) and Cross-Site Sc
   This guarantees that non-admin and non-tenant accounts are booted before the browser can fetch or draw sensitive forms.
   - **Module Casing & Robustness**: Standard database modules are capitalized (e.g. `['Sales', 'Operations', 'Logistics', 'Finance', 'HR', 'Products', 'Marketing', 'Customer Service']`). However, the `checkRoleGate()` function is designed to match names **case-insensitively** to prevent access/redirect failures from minor casing mismatches. Always declare route gates using the standard capitalized naming conventions for consistency.
 
+### 4.1 Shared Multi-Module Pages
+When one feature is intentionally available through two or more modules, treat
+it as one shared authorization surface rather than cloning module-specific
+pages.
+
+- **Use one canonical route and implementation**. Put the page at a neutral
+  route such as `/dashboard/media`; module-specific legacy routes redirect to
+  the canonical route and preserve relevant hashes/query state.
+- **The page gate is an OR-list of only the authorized modules**:
+  ```javascript
+  const authInfo = await window.BKAuth.checkRoleGate(
+    ['Marketing', 'Sales'],
+    '/admin.html'
+  );
+  ```
+  A regular user passes when they have either listed module. Owners/admins pass
+  through the standard `checkRoleGate()` override and do not need to be listed.
+  Never retain an unrelated historical module (for example `Operations`) merely
+  because the feature originated on one of its pages.
+- **Repeat the same canonical link under every authorized sidebar group**. Each
+  copy uses that group's `data-role`, points to the identical route, and shows
+  the small “Shared with other roles” icon used by Payout Tracker. Sidebar
+  visibility is navigation only; the route gate remains authoritative.
+- **Respect scoped module permissions**. If an authorized module supports
+  `Module:Subpage` access, add the canonical shared route to that module's
+  `subpageAccess` option and filter its sidebar child with
+  `hasModuleAccessForPath()`. Do not let a shared neutral URL accidentally fail
+  a valid scoped grant or broaden a different scoped grant.
+- **Keep every route chunk consistent**. Customer/product/settings sibling
+  pages for the same shared feature must use the same module gate. Cache-bust
+  each changed route script so an old gate is not retained by active sessions.
+- **Required regression matrix**: test each authorized module by itself, every
+  unrelated module by itself, no-module users, owner/admin override, both
+  sidebar placements, canonical sibling routes, and legacy redirects. An
+  unrelated module must remain denied even if it could previously open the
+  feature.
+
 ---
 
 ## 5. Critical Auth Gating: tenantId vs. companyId

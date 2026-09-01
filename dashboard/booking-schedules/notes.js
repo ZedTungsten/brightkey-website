@@ -1,7 +1,8 @@
 (function () {
   'use strict';
 
-  const state = { sb: null, companyId: null, notes: [], editingId: null, deletingId: null, initialized: false };
+  const PAGE_SIZE = 10;
+  const state = { sb: null, companyId: null, notes: [], page: 0, total: 0, query: '', loading: false, editingId: null, deletingId: null, initialDraft: null, initialized: false };
   const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'HR']);
   const $ = id => document.getElementById(id);
 
@@ -47,6 +48,14 @@
     return Boolean(probe.textContent.trim() || probe.querySelector('hr'));
   }
 
+  function currentDraft() {
+    const contentHtml = sanitizeHtml($('installer-note-editor').innerHTML);
+    return {
+      title: $('installer-note-title').value,
+      contentHtml: hasContent(contentHtml) ? contentHtml : ''
+    };
+  }
+
   function setModalOpen(modal, open) {
     if (open) {
       modal.style.display = 'flex';
@@ -65,6 +74,7 @@
     $('installer-note-modal-title').textContent = note ? 'Edit Note' : 'Create Notes';
     $('installer-note-title').value = note?.title || '';
     $('installer-note-editor').innerHTML = sanitizeHtml(note?.content_html || '');
+    state.initialDraft = currentDraft();
     $('installer-note-form-error').textContent = '';
     setModalOpen($('installer-note-modal'), true);
     setTimeout(() => $('installer-note-title').focus(), 0);
@@ -73,16 +83,41 @@
   function closeEditor() {
     setModalOpen($('installer-note-modal'), false);
     state.editingId = null;
+    state.initialDraft = null;
+  }
+
+  function hasUnsavedChanges() {
+    if (!state.initialDraft) return false;
+    const draft = currentDraft();
+    return draft.title !== state.initialDraft.title || draft.contentHtml !== state.initialDraft.contentHtml;
+  }
+
+  function requestCloseEditor() {
+    if (!hasUnsavedChanges()) {
+      closeEditor();
+      return;
+    }
+    setModalOpen($('discard-installer-note-modal'), true);
+  }
+
+  function keepEditing() {
+    setModalOpen($('discard-installer-note-modal'), false);
+    setTimeout(() => $('installer-note-title').focus(), 150);
+  }
+
+  function discardEditorChanges() {
+    setModalOpen($('discard-installer-note-modal'), false);
+    closeEditor();
   }
 
   function render() {
     const body = $('installer-notes-tbody');
     if (!state.notes.length) {
-      body.innerHTML = '<tr><td colspan="3"><div class="installer-notes-empty">No notes have been created yet.</div></td></tr>';
+      body.innerHTML = `<tr><td colspan="3"><div class="installer-notes-empty">${state.query ? 'No notes match your search.' : 'No notes have been created yet.'}</div></td></tr>`;
       return;
     }
 
-    body.replaceChildren(...state.notes.map(note => {
+    const rows = state.notes.map(note => {
       const row = document.createElement('tr');
       const titleCell = document.createElement('td');
       const contentCell = document.createElement('td');
@@ -97,19 +132,65 @@
       </div>`;
       row.append(titleCell, contentCell, actionsCell);
       return row;
-    }));
+    });
+    const spacer = document.createElement('tr');
+    spacer.className = 'installer-notes-spacer-row';
+    const spacerCell = document.createElement('td');
+    spacerCell.colSpan = 3;
+    spacer.appendChild(spacerCell);
+    body.replaceChildren(...rows, spacer);
+  }
+
+  function paginationItems(totalPages, currentPage) {
+    if (totalPages <= 10) return Array.from({ length: totalPages }, (_, index) => index + 1);
+    const middleStart = Math.min(Math.max(currentPage - 1, 4), totalPages - 6);
+    const pages = [1, 2, 3, ...Array.from({ length: 4 }, (_, index) => middleStart + index), totalPages - 2, totalPages - 1, totalPages];
+    return [...new Set(pages)].reduce((items, page, index, uniquePages) => {
+      if (index && page - uniquePages[index - 1] > 1) items.push('ellipsis');
+      items.push(page);
+      return items;
+    }, []);
+  }
+
+  function updatePagination(rowCount) {
+    const start = state.total ? state.page * PAGE_SIZE + 1 : 0;
+    const end = Math.min(state.page * PAGE_SIZE + rowCount, state.total);
+    const pages = Math.max(1, Math.ceil(state.total / PAGE_SIZE));
+    $('installer-notes-page-summary').textContent = `${start.toLocaleString()}–${end.toLocaleString()} of ${state.total.toLocaleString()} · Page ${state.page + 1} of ${pages}`;
+    $('installer-notes-page-numbers').innerHTML = paginationItems(pages, state.page + 1).map(item => item === 'ellipsis'
+      ? '<span class="installer-notes-page-ellipsis" aria-hidden="true">…</span>'
+      : `<button class="installer-notes-page-number${item === state.page + 1 ? ' active' : ''}" type="button" data-page="${item}"${state.loading ? ' disabled' : ''}${item === state.page + 1 ? ' aria-current="page"' : ''}>${item}</button>`).join('');
+    $('installer-notes-previous-page').disabled = state.loading || state.page === 0;
+    $('installer-notes-next-page').disabled = state.loading || end >= state.total;
   }
 
   async function loadNotes() {
-    const { data, error } = await state.sb
+    if (state.loading) return;
+    state.loading = true;
+    $('installer-notes-tbody').innerHTML = '<tr><td colspan="3"><div class="installer-notes-loading"><span class="spinner-cyan"></span><span>Loading notes...</span></div></td></tr>';
+    updatePagination(0);
+    const from = state.page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    let request = state.sb
       .from('installer_notes')
-      .select('id,title,content_html,created_at,updated_at')
-      .eq('company_id', state.companyId)
+      .select('id,title,content_html,created_at,updated_at', { count: 'exact' })
+      .eq('company_id', state.companyId);
+    if (state.query) {
+      const term = state.query.replace(/[,%()]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (term) request = request.or(`title.ilike.%${term}%,content_html.ilike.%${term}%`);
+    }
+    const { data, error, count } = await request
       .order('updated_at', { ascending: false })
-      .limit(100);
-    if (error) throw error;
-    state.notes = data || [];
-    render();
+      .range(from, to);
+    try {
+      if (error) throw error;
+      state.total = count || 0;
+      state.notes = data || [];
+      render();
+    } finally {
+      state.loading = false;
+      updatePagination(state.notes.length);
+    }
   }
 
   async function saveNote(event) {
@@ -135,6 +216,7 @@
       const { error } = await query;
       if (error) throw error;
       closeEditor();
+      if (!wasEditing) state.page = 0;
       await loadNotes();
       showToast(wasEditing ? 'Note updated successfully.' : 'Note created successfully.');
     } catch (error) {
@@ -160,6 +242,7 @@
       if (error) throw error;
       setModalOpen($('delete-installer-note-modal'), false);
       state.deletingId = null;
+      if (state.notes.length === 1 && state.page > 0) state.page -= 1;
       await loadNotes();
       showToast('Note deleted successfully.');
     } catch (error) {
@@ -172,10 +255,11 @@
 
   function bindEvents() {
     $('create-installer-note').addEventListener('click', () => openEditor());
-    $('close-installer-note-modal').addEventListener('click', closeEditor);
-    $('cancel-installer-note').addEventListener('click', closeEditor);
+    $('close-installer-note-modal').addEventListener('click', requestCloseEditor);
+    $('cancel-installer-note').addEventListener('click', requestCloseEditor);
     $('installer-note-form').addEventListener('submit', saveNote);
-    $('installer-note-modal').addEventListener('click', event => { if (event.target === event.currentTarget) closeEditor(); });
+    $('keep-editing-installer-note').addEventListener('click', keepEditing);
+    $('discard-installer-note-changes').addEventListener('click', discardEditorChanges);
     $('installer-note-editor').addEventListener('paste', event => {
       event.preventDefault();
       document.execCommand('insertText', false, event.clipboardData.getData('text/plain'));
@@ -205,6 +289,27 @@
       setModalOpen($('delete-installer-note-modal'), false);
     });
     $('confirm-delete-installer-note').addEventListener('click', deleteNote);
+    $('installer-notes-page-numbers').addEventListener('click', event => {
+      const button = event.target.closest('[data-page]');
+      if (!button || state.loading) return;
+      state.page = Number(button.dataset.page) - 1;
+      loadNotes();
+    });
+    $('installer-notes-previous-page').addEventListener('click', () => {
+      if (state.page > 0 && !state.loading) { state.page -= 1; loadNotes(); }
+    });
+    $('installer-notes-next-page').addEventListener('click', () => {
+      if ((state.page + 1) * PAGE_SIZE < state.total && !state.loading) { state.page += 1; loadNotes(); }
+    });
+    let searchTimer;
+    $('installer-notes-search').addEventListener('input', event => {
+      window.clearTimeout(searchTimer);
+      searchTimer = window.setTimeout(() => {
+        state.query = event.target.value.trim();
+        state.page = 0;
+        loadNotes();
+      }, 250);
+    });
   }
 
   async function init({ sb, companyId }) {

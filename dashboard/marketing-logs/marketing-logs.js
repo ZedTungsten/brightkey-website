@@ -191,6 +191,8 @@
 
       rowsForDate.forEach(log => {
         const tr = document.createElement('tr');
+        tr.dataset.logId = log.id || '';
+        tr.dataset.date = dateString;
         if (log.starred) tr.classList.add('row-starred');
         if (y === today.getFullYear() && m === today.getMonth() && d === today.getDate()) tr.classList.add('row-today');
 
@@ -205,16 +207,16 @@
         <td class="cell-date">${formatLogDate(dateString)}</td>
         <td class="cell-user"><div class="user-badge" data-log-key="${badgeKey}" style="${initials ? '' : 'display: none;'}">${initials}</div></td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'item', this.value)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'item', this.value, this)" oninput="autoResizeTextarea(this)">${esc(log.item)}</textarea>
         </td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'change_desc', this.value)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'change_desc', this.value, this)" oninput="autoResizeTextarea(this)">${esc(log.change_desc)}</textarea>
         </td>
         <td>
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'reason', this.value)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'reason', this.value, this)" oninput="autoResizeTextarea(this)">${esc(log.reason)}</textarea>
         </td>
         <td class="cell-learning">
-          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'learning', this.value)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
+          <textarea rows="1" class="cell-textarea" onblur="saveCell('${dateString}', '${logId}', 'learning', this.value, this)" oninput="autoResizeTextarea(this)">${esc(log.learning)}</textarea>
         </td>
         <td>
           <div class="action-btn-group">
@@ -249,7 +251,9 @@
     }, 50);
   }
 
-  window.saveCell = async function(dateString, logId, field, value) {
+  window.saveCell = async function(dateString, logId, field, value, textarea) {
+    const row = textarea?.closest('tr');
+    logId = row?.dataset.logId || logId;
     const existing = logId ? logsList.find(log => log.id === logId) : null;
     const prevVal = existing ? existing[field] : '';
     const newVal = value.trim();
@@ -267,9 +271,12 @@
         if (wouldBeEmpty) {
           const { error } = await sb.from('marketing_logs').delete().eq('id', existing.id);
           if (error) throw error;
-          showToast('Log entry cleared.');
           // Remove from local logs list immediately
           logsList = logsList.filter(l => l.id !== existing.id);
+          if (row) {
+            row.dataset.logId = '';
+            row.querySelector('.user-badge')?.setAttribute('style', 'display: none;');
+          }
         } else {
           const payload = {
             [field]: newVal,
@@ -283,8 +290,6 @@
             .single();
 
           if (error) throw error;
-          showToast('Cell saved.');
-
           // Update local logsList item
           const idx = logsList.findIndex(l => l.id === existing.id);
           if (idx !== -1) {
@@ -312,11 +317,15 @@
           .single();
 
         if (error) throw error;
-        showToast('Log created.');
         logsList.push(data);
+        if (row) {
+          row.dataset.logId = data.id;
+          const badge = row.querySelector('.user-badge');
+          if (badge) badge.dataset.logKey = data.id;
+        }
       }
 
-      await loadMarketingLogs();
+      updateUserBadges();
     } catch (err) {
       console.error(err);
       showToast('Save failed: ' + err.message, true);
@@ -350,6 +359,7 @@
 
   window.toggleStarRow = async function(e, dateString, logId, currentStarredState) {
     e.stopPropagation();
+    logId = e.currentTarget.closest('tr')?.dataset.logId || logId;
     const newStarred = !currentStarredState;
     const existing = logId ? logsList.find(log => log.id === logId) : null;
 

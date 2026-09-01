@@ -339,15 +339,11 @@
     const yearSelect = document.getElementById('product-media-year');
     const quarterSelect = document.getElementById('product-media-quarter');
     let earliestYear = state.year;
-    const { data, error } = await getSb().from('installation_bookings')
-      .select('scheduled_date')
-      .eq('company_id', state.companyId)
-      .not('scheduled_date', 'is', null)
-      .order('scheduled_date', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (!error && data?.scheduled_date) {
-      const parsedYear = Number(String(data.scheduled_date).slice(0, 4));
+    const { data, error } = await getSb().rpc('get_shared_media_earliest_date', {
+      p_company_id: state.companyId
+    });
+    if (!error && data) {
+      const parsedYear = Number(String(data).slice(0, 4));
       if (Number.isInteger(parsedYear)) earliestYear = Math.min(parsedYear, state.year);
     }
     yearSelect.replaceChildren();
@@ -363,15 +359,13 @@
 
   async function fetchBookingBatch(offset) {
     const range = selectedQuarterRange();
-    const { data, error } = await getSb().from('installation_bookings')
-      .select('id, customer_name, customer_first_name, customer_last_name, customer_is_company, customer_company_name, scheduled_date, status, doors, products')
-      .eq('company_id', state.companyId)
-      .neq('status', 'cancelled')
-      .gte('scheduled_date', range.start)
-      .lt('scheduled_date', range.end)
-      .order('scheduled_date', { ascending: false })
-      .order('id', { ascending: false })
-      .range(offset, offset + BOOKING_BATCH_SIZE - 1);
+    const { data, error } = await getSb().rpc('get_shared_media_bookings', {
+      p_company_id: state.companyId,
+      p_start_date: range.start,
+      p_end_date: range.end,
+      p_offset: offset,
+      p_limit: BOOKING_BATCH_SIZE
+    });
     if (error) throw error;
     return data || [];
   }
@@ -404,7 +398,7 @@
   }
 
   async function init() {
-    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'owner', 'admin', 'Operations', 'Sales'], '/admin.html');
+    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'Sales'], '/admin.html');
     if (!authInfo) return;
     const { data: company, error } = await getSb().from('companies').select('id').eq('tenant_id', authInfo.tenantId).limit(1).maybeSingle();
     if (error || !company?.id) return;

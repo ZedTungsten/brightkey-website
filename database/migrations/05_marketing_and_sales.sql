@@ -737,3 +737,68 @@ WHERE feature.id = ranked.id;
 
 CREATE INDEX IF NOT EXISTS business_features_business_sort_idx
   ON public.business_features (business_id, sort_order, id);
+-- POSTING IMAGE EDITOR SAVED CANVASES
+CREATE TABLE IF NOT EXISTS public.posting_image_canvases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL CHECK (char_length(name) BETWEEN 1 AND 120),
+  width INTEGER NOT NULL CHECK (width BETWEEN 100 AND 8000),
+  height INTEGER NOT NULL CHECK (height BETWEEN 100 AND 8000),
+  image_path TEXT NOT NULL,
+  created_by UUID DEFAULT auth.uid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.posting_image_canvases ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.posting_image_canvases FROM anon;
+GRANT SELECT, INSERT, DELETE ON public.posting_image_canvases TO authenticated;
+
+CREATE INDEX IF NOT EXISTS idx_posting_image_canvases_company_updated
+  ON public.posting_image_canvases (company_id, updated_at DESC);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'posting_image_canvases'
+      AND policyname = 'Company members can read posting canvases'
+  ) THEN
+    CREATE POLICY "Company members can read posting canvases"
+      ON public.posting_image_canvases FOR SELECT TO authenticated
+      USING (company_id IN (
+        SELECT company.id FROM public.companies AS company
+        JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+        WHERE member.user_id = (SELECT auth.uid())
+      ));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'posting_image_canvases'
+      AND policyname = 'Company members can create posting canvases'
+  ) THEN
+    CREATE POLICY "Company members can create posting canvases"
+      ON public.posting_image_canvases FOR INSERT TO authenticated
+      WITH CHECK (company_id IN (
+        SELECT company.id FROM public.companies AS company
+        JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+        WHERE member.user_id = (SELECT auth.uid())
+      ) AND created_by = (SELECT auth.uid()));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'posting_image_canvases'
+      AND policyname = 'Company members can delete posting canvases'
+  ) THEN
+    CREATE POLICY "Company members can delete posting canvases"
+      ON public.posting_image_canvases FOR DELETE TO authenticated
+      USING (company_id IN (
+        SELECT company.id FROM public.companies AS company
+        JOIN public.tenant_members AS member ON member.tenant_id = company.tenant_id
+        WHERE member.user_id = (SELECT auth.uid())
+      ));
+  END IF;
+END $$;

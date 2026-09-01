@@ -858,7 +858,7 @@ async function buildProducts() {
     $('[data-template="meta-desc"]').attr('content', descShort);
     $('[data-template="meta-title"]').text(`${p.title} — BrightKey`);
     $('[data-template="og-url"]').attr('content', `https://brightkeysolutions.com/products/${p.slug}`);
-    $('[data-template="og-title"]').attr('content', `${p.title} — BrightKey`);
+    $('[data-template="og-title"]').attr('content', `${p.sku} - ${p.title}`);
     $('[data-template="og-desc"]').attr('content', descShort);
     $('[data-template="og-image"]').attr('content', mainImgUrl);
 
