@@ -42,8 +42,13 @@ test('Shared Media preserves booking and installer media contracts and is linked
 });
 
 test('Shared Media thumbnails show complete centered images without cropping', () => {
-  assert.match(styles, /\.media-tile img\s*\{[\s\S]*?object-fit:\s*contain;/);
-  assert.match(styles, /object-position:\s*center center;/);
+  const imageRule = styles.match(/\.media-tile img\s*\{([\s\S]*?)\}/)?.[1] || '';
+  assert.match(imageRule, /position:\s*absolute;/);
+  assert.match(imageRule, /inset:\s*0;/);
+  assert.match(imageRule, /max-width:\s*100%;/);
+  assert.match(imageRule, /max-height:\s*100%;/);
+  assert.match(imageRule, /margin:\s*auto;/);
+  assert.doesNotMatch(imageRule, /object-fit:\s*cover;/);
   assert.match(styles, /\.media-tile video\s*\{[\s\S]*?object-fit:\s*cover;/);
 });
 
