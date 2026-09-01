@@ -41,6 +41,12 @@ test('Shared Media preserves booking and installer media contracts and is linked
   assert.match(sidebar, /title="Shared with other roles"/);
 });
 
+test('Shared Media thumbnails show complete centered images without cropping', () => {
+  assert.match(styles, /\.media-tile img\s*\{[\s\S]*?object-fit:\s*contain;/);
+  assert.match(styles, /object-position:\s*center center;/);
+  assert.match(styles, /\.media-tile video\s*\{[\s\S]*?object-fit:\s*cover;/);
+});
+
 test('Shared Media permits Marketing or Sales modules without granting Operations access', () => {
   assert.match(script, /checkRoleGate\(\['Marketing', 'Sales'\]/);
   assert.match(productsScript, /checkRoleGate\(\['Marketing', 'Sales'\]/);
