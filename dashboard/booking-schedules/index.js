@@ -891,11 +891,20 @@
             || (isDeliveryOnly && isDispatched)
             || isDayOffPassed;
 
+          const activeProductSkus = productsArr
+            .filter(product => !product.cancelled)
+            .map(product => String(product.sku || '').trim().toUpperCase())
+            .filter(Boolean);
+          const isServiceOnly = activeProductSkus.length > 0 && activeProductSkus.every(sku => (
+            String(dbProductsBySku.get(sku)?.category || '').trim().toLowerCase() === 'service'
+          ));
+          const completedBadgeColor = isServiceOnly ? '#F59E0B' : '#22C55E';
+
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (isFullyDone 
                 ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
-                     ${isDayOff ? '' : `<span class="calendar-inst-badge" style="background:#22C55E; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>`}
+                     ${isDayOff ? '' : `<span class="calendar-inst-badge" style="background:${completedBadgeColor}; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>`}
                      ${calendarInstallerName ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''}
                    </div>`
                 : (calendarInstallerName ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''));

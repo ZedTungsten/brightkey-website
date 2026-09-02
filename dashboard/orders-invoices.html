@@ -1031,10 +1031,24 @@
       const initialProducts = [];
       const savedUnitPrices = data.product_unit_prices ? data.product_unit_prices.split('|').map(s => Math.round(parseFloat(s.trim()) * 100)) : [];
       if (data.products && Array.isArray(data.products)) {
-        data.products.forEach((p, idx) => {
-          const savedPrice = savedUnitPrices[idx] !== undefined && !isNaN(savedUnitPrices[idx]) ? savedUnitPrices[idx] : null;
+        let activeProductIndex = 0;
+        data.products.forEach(p => {
+          initialProducts.push({
+            sku: p.sku,
+            qty: p.qty,
+            title: p.title,
+            name: p.name,
+            price: p.price,
+            lineTotal: p.lineTotal,
+            warehouse_id: p.warehouse_id,
+            cancelled: Boolean(p.cancelled)
+          });
+          if (p.cancelled) return;
+          const savedPrice = savedUnitPrices[activeProductIndex] !== undefined && !isNaN(savedUnitPrices[activeProductIndex])
+            ? savedUnitPrices[activeProductIndex]
+            : null;
+          activeProductIndex += 1;
           addInvoiceProductRow(p.sku, p.qty, savedPrice, p.warehouse_id);
-          initialProducts.push({ sku: p.sku, qty: p.qty });
         });
       }
 
@@ -2310,7 +2324,16 @@
         loadedBookingState = {
           ...customer,
           scheduled_date: scheduledDate,
-          products: productsList.map(p => ({ sku: p.sku, qty: p.qty })),
+          products: productsList.map(p => ({
+            sku: p.sku,
+            qty: p.qty,
+            title: p.title,
+            name: p.name,
+            price: p.price,
+            lineTotal: p.lineTotal,
+            warehouse_id: p.warehouse_id,
+            cancelled: Boolean(p.cancelled)
+          })),
           charges: cLabels.map((l, idx) => ({ label: l, val: parseFloat(cValues[idx]) })),
           deductions: dLabels.map((l, idx) => ({ label: l, val: parseFloat(dValues[idx]) }))
         };
