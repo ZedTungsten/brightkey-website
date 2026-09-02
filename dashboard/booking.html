@@ -259,6 +259,11 @@
       color: #1d4ed8;
       border-left: 2px solid #3b82f6;
     }
+    .calendar-slot.day-event {
+      background: #b91c1c;
+      color: #ffffff;
+      border-left: 2px solid #991b1b;
+    }
     .calendar-inst-badge {
       background: #10b981;
       color: #ffffff;
@@ -2854,16 +2859,36 @@
     ];
 
     let dbBookings = [];
+    let bookingCalendarEvents = [];
+
+    function getBookingCalendarEventSettingKey() {
+      return `booking_calendar_day_events_${currentYear}_${String(currentMonth + 1).padStart(2, '0')}`;
+    }
 
     async function fetchRealBookings() {
       try {
-        if (window.BKAuth && window.BKAuth.sb) {
-          const { data, error } = await window.BKAuth.sb
-            .from('installation_bookings')
-            .select('scheduled_date, scheduled_time, customer_name, customer_address, installer_name');
-          if (error) throw error;
-          if (data) {
-            dbBookings = data.map(b => {
+        if (window.BKAuth && window.BKAuth.sb && currentCompanyId) {
+          const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+          const monthEnd = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(new Date(currentYear, currentMonth + 1, 0).getDate()).padStart(2, '0')}`;
+          const [bookingsResult, eventsResult] = await Promise.all([
+            window.BKAuth.sb
+              .from('installation_bookings')
+              .select('scheduled_date, scheduled_time, customer_name, customer_address, installer_name')
+              .eq('company_id', currentCompanyId)
+              .gte('scheduled_date', monthStart)
+              .lte('scheduled_date', monthEnd),
+            window.BKAuth.sb
+              .from('global_settings')
+              .select('value')
+              .eq('company_id', currentCompanyId)
+              .eq('key', getBookingCalendarEventSettingKey())
+              .maybeSingle()
+          ]);
+          if (bookingsResult.error) throw bookingsResult.error;
+          if (eventsResult.error) throw eventsResult.error;
+          bookingCalendarEvents = Array.isArray(eventsResult.data?.value) ? eventsResult.data.value : [];
+          if (bookingsResult.data) {
+            dbBookings = bookingsResult.data.map(b => {
               const nameAbbrev = b.customer_name ? b.customer_name.split(' ')[0] : 'Customer';
               const city = b.customer_address ? (b.customer_address.split(',')[1]?.trim() || '') : '';
               
@@ -2912,7 +2937,7 @@
 
 
 
-    function changeMonth(direction) {
+    async function changeMonth(direction) {
       currentMonth += direction;
       if (currentMonth < 0) {
         currentMonth = 11;
@@ -2921,6 +2946,7 @@
         currentMonth = 0;
         currentYear++;
       }
+      await fetchRealBookings();
       drawCalendar();
     }
 
@@ -2947,9 +2973,22 @@
       for (let day = 1; day <= totalDays; day++) {
         const dateStr = `${currentYear}-${(currentMonth + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
         const dayBookings = bookings.filter(b => b.date === dateStr);
+        const dayEvents = bookingCalendarEvents.filter(event => event.date === dateStr);
 
         let amHtml = '';
         let pmHtml = '';
+
+        dayEvents.forEach(dayEvent => {
+          const installerNames = (dayEvent.installers || []).map(installer => installer.name).filter(Boolean).join(', ');
+          const eventName = String(dayEvent.name || dayEvent.type || 'Day-off').replace(/_/g, ' ').trim();
+          const label = installerNames ? `${eventName} - ${installerNames}` : eventName;
+          const eventHtml = `<div class="calendar-slot day-event" title="${escapeHtml(label)}"><div>${escapeHtml(label)}</div></div>`;
+          if (String(dayEvent.timeSlot || '').toLowerCase().includes('pm') || String(dayEvent.timeSlot || '').toLowerCase().includes('afternoon')) {
+            pmHtml += eventHtml;
+          } else {
+            amHtml += eventHtml;
+          }
+        });
 
         dayBookings.forEach(b => {
           const displayText = `${b.name} (${b.city})`;

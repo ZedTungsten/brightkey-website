@@ -302,6 +302,9 @@
       // Financials
       const grandTotalCents = selectedBooking.grand_total || 0;
       document.getElementById('det-total').innerText = (grandTotalCents / 100).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' });
+      if (typeof window.renderBookingPaymentLedger === 'function') {
+        window.renderBookingPaymentLedger(selectedBooking);
+      }
 
       const showTotalChk = document.getElementById('det-show-total-installers');
       if (showTotalChk) {

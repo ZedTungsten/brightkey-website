@@ -19,7 +19,11 @@
     sb: null,
     companyId: null,
     savedCanvases: [],
-    selectedSavedId: null
+    selectedSavedId: null,
+    currentProjectId: null,
+    currentProjectName: '',
+    projectDirty: false,
+    baseImagePath: null
   };
 
   const canvas = document.getElementById('editor-canvas');
@@ -31,7 +35,22 @@
   const previewContext = preview.getContext('2d');
   const HANDLE_SIZE = 20;
   let draggedLayerIndex = null;
-
+  let zoomScrollFrame = 0;
+  let projects = null;
+  function canvasCreatedKey() { return `bk-posting-image-editor-canvas:${state.companyId}`; }
+  function rememberCanvasCreated() {
+    try { localStorage.setItem(canvasCreatedKey(), '1'); }
+    catch (error) { console.warn('Canvas creation preference could not be saved.', error); }
+  }
+  function hasCreatedCanvas() {
+    try { return Boolean(localStorage.getItem(canvasCreatedKey())); }
+    catch (error) { console.warn('Canvas creation preference could not be read.', error); return false; }
+  }
+  function solidImageColor(image) {
+    const sample = document.createElement('canvas'); sample.width = 8; sample.height = 8; const ctx = sample.getContext('2d', { willReadFrequently: true }); ctx.drawImage(image, 0, 0, 8, 8);
+    const pixels = ctx.getImageData(0, 0, 8, 8).data; const [red, green, blue, alpha] = pixels; for (let index = 4; index < pixels.length; index += 4) { if (pixels[index] !== red || pixels[index + 1] !== green || pixels[index + 2] !== blue || pixels[index + 3] !== alpha) return null; }
+    return alpha === 255 ? `#${[red, green, blue].map(value => value.toString(16).padStart(2, '0')).join('').toUpperCase()}` : null;
+  }
   function toast(message) {
     const container = document.getElementById('toast-container');
     const item = document.createElement('div');
@@ -92,9 +111,9 @@
   }
 
   function updateImageProperties() {
-    const target = activeImage();
+    const target = state.selected === 'image' ? activeImage() : null;
     const disabled = !target;
-    document.getElementById('image-properties').setAttribute('aria-disabled', String(disabled));
+    const properties = document.getElementById('image-properties'); properties.hidden = disabled; properties.setAttribute('aria-disabled', String(disabled));
     ['reset-image-dimensions', 'reset-image-rotation', 'reset-image-opacity', 'image-opacity', 'flip-image-horizontal', 'flip-image-vertical']
       .forEach(id => { document.getElementById(id).disabled = disabled; });
     document.getElementById('image-dimensions-value').textContent = target ? `${Math.round(target.width)} × ${Math.round(target.height)} px` : 'No image selected';
@@ -266,7 +285,6 @@
     document.getElementById('upload-label').classList.remove('disabled');
     document.getElementById('upload-label').setAttribute('aria-disabled', 'false');
     document.getElementById('fill-height').disabled = false;
-    document.getElementById('open-save-canvas-modal').disabled = false;
     requestAnimationFrame(fillCanvasHeight);
   }
 
@@ -285,12 +303,29 @@
   function fillCanvasHeight() {
     state.zoom = 100;
     applyZoom();
-    document.getElementById('canvas-stage').scrollTo({ top: 0, left: 0 });
+    requestAnimationFrame(centerCanvasInStage);
   }
 
   function setZoom(value) {
+    const stage = document.getElementById('canvas-stage');
+    const oldScale = state.displayScale || 1;
+    const viewportCenterX = stage.scrollLeft + stage.clientWidth / 2;
+    const viewportCenterY = stage.scrollTop + stage.clientHeight / 2;
     state.zoom = Math.min(200, Math.max(25, Number(value) || 100));
     applyZoom();
+    const ratio = state.displayScale / oldScale;
+    const targetLeft = viewportCenterX * ratio - stage.clientWidth / 2;
+    const targetTop = viewportCenterY * ratio - stage.clientHeight / 2;
+    const restoreScroll = () => stage.scrollTo({ left: targetLeft, top: targetTop });
+    restoreScroll();
+    cancelAnimationFrame(zoomScrollFrame);
+    zoomScrollFrame = requestAnimationFrame(() => {
+      restoreScroll();
+      zoomScrollFrame = requestAnimationFrame(() => {
+        restoreScroll();
+        zoomScrollFrame = 0;
+      });
+    });
   }
 
   function centerCanvasInStage() {
@@ -298,8 +333,8 @@
     const stageRect = stage.getBoundingClientRect();
     const canvasRect = canvas.getBoundingClientRect();
     stage.scrollBy({
-      left: canvasRect.left + canvasRect.width / 2 - stageRect.left - stage.clientWidth / 2,
-      top: canvasRect.top + canvasRect.height / 2 - stageRect.top - stage.clientHeight / 2
+      left: canvasRect.left + canvasRect.width / 2 - stageRect.left - stage.clientLeft - stage.clientWidth / 2,
+      top: canvasRect.top + canvasRect.height / 2 - stageRect.top - stage.clientTop - stage.clientHeight / 2
     });
   }
 
@@ -350,6 +385,7 @@
     state.images.splice(toIndex, 0, moved);
     state.activeIndex = state.images.indexOf(active);
     state.selected = 'image';
+    projects.markDirty();
     renderStrip();
     drawCanvas();
   }
@@ -358,13 +394,14 @@
     if (!state.canvasReady) return;
     const valid = [...files].filter(file => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type));
     if (!valid.length) return;
-    const loaded = await Promise.all(valid.map(async file => ({ ...await loadFile(file), name: file.name })));
-    loaded.forEach(({ image, url, name }) => {
+    const loaded = await Promise.all(valid.map(async file => ({ ...await loadFile(file), name: file.name, file })));
+    loaded.forEach(({ image, url, name, file }) => {
       const transform = fitTransform(image, 'contain');
-      state.images.push({ image, url, name, ...transform, originalWidth: transform.width, originalHeight: transform.height, rotation: 0, opacity: 1, flipX: false, flipY: false });
+      state.images.push({ image, url, name, file, ...transform, originalWidth: transform.width, originalHeight: transform.height, rotation: 0, opacity: 1, flipX: false, flipY: false });
     });
     if (state.activeIndex < 0) state.activeIndex = 0;
     state.selected = 'image';
+    projects.markDirty();
     renderStrip();
     requestAnimationFrame(() => {
       applyZoom();
@@ -385,77 +422,6 @@
         else reject(new Error('Canvas could not be encoded.'));
       }, 'image/png');
     });
-  }
-
-  function publicCanvasUrl(path) {
-    return state.sb.storage.from('brightkey-assets').getPublicUrl(path).data.publicUrl;
-  }
-
-  async function saveCanvas() {
-    const nameInput = document.getElementById('saved-canvas-name');
-    const errorNode = document.getElementById('save-canvas-error');
-    const saveButton = document.getElementById('save-canvas');
-    const name = nameInput.value.trim();
-    errorNode.hidden = Boolean(name);
-    nameInput.style.borderColor = name ? '' : 'var(--danger)';
-    if (!name || !state.canvasReady || !state.companyId) {
-      if (!name) nameInput.focus();
-      return;
-    }
-    saveButton.disabled = true;
-    saveButton.textContent = 'Saving...';
-    const path = `companies/${state.companyId}/posting/canvases/${crypto.randomUUID()}.png`;
-    try {
-      const blob = await canvasBlob();
-      const { error: uploadError } = await state.sb.storage.from('brightkey-assets').upload(path, blob, { contentType: 'image/png', cacheControl: '31536000', upsert: false });
-      if (uploadError) throw uploadError;
-      const { error: insertError } = await state.sb.from('posting_image_canvases').insert({
-        company_id: state.companyId,
-        name,
-        width: state.width,
-        height: state.height,
-        image_path: path
-      });
-      if (insertError) {
-        await state.sb.storage.from('brightkey-assets').remove([path]);
-        throw insertError;
-      }
-      closeModal(document.getElementById('save-canvas-modal'));
-      nameInput.value = '';
-      toast('Canvas saved.');
-    } catch (error) {
-      console.error(error);
-      toast('Canvas could not be saved. Please try again.');
-    } finally {
-      saveButton.disabled = false;
-      saveButton.textContent = 'Save Canvas';
-    }
-  }
-
-  function renderSavedCanvases() {
-    const list = document.getElementById('saved-canvases-list');
-    if (!state.savedCanvases.length) {
-      list.innerHTML = '<div class="saved-canvases-state">No saved canvases yet.</div>';
-      return;
-    }
-    list.replaceChildren(...state.savedCanvases.map(saved => {
-      const row = document.createElement('div');
-      row.className = 'saved-canvas-row';
-      const name = document.createElement('span');
-      name.className = 'saved-canvas-name';
-      name.textContent = saved.name;
-      name.title = saved.name;
-      const dimensions = document.createElement('span');
-      dimensions.className = 'saved-canvas-dimensions';
-      dimensions.textContent = `${saved.width} × ${saved.height}`;
-      const loadButton = document.createElement('button');
-      loadButton.type = 'button';
-      loadButton.className = 'btn btn-cyan';
-      loadButton.dataset.canvasId = saved.id;
-      loadButton.textContent = 'Load';
-      row.append(name, dimensions, loadButton);
-      return row;
-    }));
   }
 
   function updateSizeAction() {
@@ -488,16 +454,6 @@
     }));
   }
 
-  async function fetchSavedCanvases() {
-    const { data, error } = await state.sb.from('posting_image_canvases')
-      .select('id,name,width,height,image_path,updated_at')
-      .eq('company_id', state.companyId)
-      .order('updated_at', { ascending: false })
-      .limit(100);
-    if (error) throw error;
-    state.savedCanvases = data || [];
-  }
-
   async function openSizeModal() {
     const list = document.getElementById('size-saved-canvases');
     state.selectedSavedId = null;
@@ -505,7 +461,7 @@
     list.innerHTML = '<div class="size-saved-state"><span class="spinner-cyan"></span><span>Loading saved canvases...</span></div>';
     openModal(document.getElementById('size-modal'));
     try {
-      await fetchSavedCanvases();
+      await projects.fetchCanvasPresets();
       renderSizeSavedCanvases();
     } catch (error) {
       console.error(error);
@@ -513,61 +469,44 @@
     }
   }
 
-  async function openSavedCanvases() {
-    const modal = document.getElementById('load-canvas-modal');
-    const list = document.getElementById('saved-canvases-list');
-    list.innerHTML = '<div class="saved-canvases-state"><span class="spinner-cyan"></span><span>Loading saved canvases...</span></div>';
-    openModal(modal);
-    try {
-      await fetchSavedCanvases();
-    } catch (error) {
-      console.error(error);
-      list.innerHTML = '<div class="saved-canvases-state">Saved canvases could not be loaded.</div>';
-      return;
-    }
-    renderSavedCanvases();
+  function openSaveDimensions() {
+    if (!state.canvasReady) return;
+    const input = document.getElementById('saved-dimensions-name');
+    document.getElementById('save-dimensions-error').hidden = true;
+    input.style.borderColor = '';
+    input.value = '';
+    openModal(document.getElementById('save-dimensions-modal'));
+    setTimeout(() => input.focus(), 0);
   }
 
-  function loadRemoteImage(url) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = url;
-    });
-  }
-
-  async function loadSavedCanvas(saved, button) {
+  async function saveDimensions() {
+    const input = document.getElementById('saved-dimensions-name');
+    const errorNode = document.getElementById('save-dimensions-error');
+    const button = document.getElementById('confirm-save-dimensions');
+    const name = input.value.trim();
+    errorNode.hidden = Boolean(name);
+    input.style.borderColor = name ? '' : 'var(--danger)';
+    if (!name || !state.canvasReady || !state.companyId) { if (!name) input.focus(); return; }
     button.disabled = true;
-    button.textContent = 'Loading...';
+    button.textContent = 'Saving...';
     try {
-      const image = await loadRemoteImage(publicCanvasUrl(saved.image_path));
-      state.width = saved.width;
-      state.height = saved.height;
-      state.canvasReady = true;
-      state.zoom = 100;
-      state.background = '#FFFFFF';
-      state.baseImage = image;
-      state.images = [];
-      state.activeIndex = -1;
-      state.overlays = { watermark: null, template: null };
-      state.selected = null;
-      state.drag = null;
-      interactionCanvas.style.cursor = 'default';
-      document.getElementById('background-color').value = '#ffffff';
-      document.getElementById('background-hex').value = '#FFFFFF';
-      renderStrip();
-      showCanvas();
-      closeModal(document.getElementById('load-canvas-modal'));
-      closeModal(document.getElementById('size-modal'));
-      toast(`Loaded ${saved.name}.`);
+      const { error } = await state.sb.from('posting_image_canvases').insert({
+        company_id: state.companyId,
+        name,
+        width: state.width,
+        height: state.height,
+        image_path: '',
+        project_data: null
+      });
+      if (error) throw error;
+      closeModal(document.getElementById('save-dimensions-modal'));
+      toast('Canvas dimensions saved.');
     } catch (error) {
       console.error(error);
-      toast('Canvas could not be loaded. Please try again.');
+      toast('Canvas dimensions could not be saved. Please try again.');
     } finally {
       button.disabled = false;
-      button.textContent = 'Load';
+      button.textContent = 'Save Canvas';
     }
   }
 
@@ -620,13 +559,21 @@
 
   function canvasTargetAt(point) {
     const handle = HANDLE_SIZE * state.width / Math.max(canvas.clientWidth, 1);
-    const image = activeImage();
-    if (!image) return { type: null, target: null, action: null, localPoint: point };
-    const localPoint = imageLocalPoint(image, point);
-    const action = isRotateHandle(image, localPoint, handle) ? 'rotate'
-      : isResizeHandle(image, localPoint, handle) ? 'resize'
-        : contains(image, localPoint) ? 'move' : null;
-    return { type: action ? 'image' : null, target: action ? image : null, action, localPoint };
+    const active = activeImage();
+    if (active) {
+      const localPoint = imageLocalPoint(active, point);
+      const action = isRotateHandle(active, localPoint, handle) ? 'rotate'
+        : isResizeHandle(active, localPoint, handle) ? 'resize'
+          : contains(active, localPoint) ? 'move' : null;
+      if (action) return { type: 'image', target: active, action, localPoint, index: state.activeIndex };
+    }
+    for (let index = state.images.length - 1; index >= 0; index -= 1) {
+      if (index === state.activeIndex) continue;
+      const image = state.images[index];
+      const localPoint = imageLocalPoint(image, point);
+      if (contains(image, localPoint)) return { type: 'image', target: image, action: 'move', localPoint, index };
+    }
+    return { type: null, target: null, action: null, localPoint: point, index: -1 };
   }
 
   function updateCanvasCursor(point) {
@@ -636,9 +583,11 @@
 
   function onCanvasPointerDown(event) {
     const point = canvasPoint(event, interactionCanvas);
-    const { type, target, action, localPoint } = canvasTargetAt(point);
+    const { type, target, action, localPoint, index } = canvasTargetAt(point);
     if (!type) { state.selected = null; drawCanvas(); return; }
+    state.activeIndex = index;
     state.selected = type;
+    renderStrip();
     const center = imageCenter(target);
     state.drag = {
       type,
@@ -676,6 +625,7 @@
       target.x = state.drag.original.x + dx;
       target.y = state.drag.original.y + dy;
     }
+    projects.markDirty();
     drawCanvas();
   }
 
@@ -683,6 +633,25 @@
     if (state.drag) interactionCanvas.releasePointerCapture(event.pointerId);
     state.drag = null;
     updateCanvasCursor(canvasPoint(event, interactionCanvas));
+  }
+
+  function deleteSelectedImage(event) {
+    if (!['Delete', 'Backspace'].includes(event.key) || state.selected !== 'image' || state.activeIndex < 0) return;
+    if (document.querySelector('.editor-modal.open')) return;
+    const target = event.target;
+    if (target instanceof Element && (target.matches('input, textarea, select') || target.isContentEditable)) return;
+    event.preventDefault();
+    const [removed] = state.images.splice(state.activeIndex, 1);
+    if (removed?.url?.startsWith('blob:')) {
+      URL.revokeObjectURL(removed.url);
+      state.urls = state.urls.filter(url => url !== removed.url);
+    }
+    state.activeIndex = -1;
+    state.selected = null;
+    state.drag = null;
+    projects.markDirty();
+    renderStrip();
+    drawCanvas();
   }
 
   function drawOverlayPreview() {
@@ -730,7 +699,7 @@
     const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1);
     const width = image.naturalWidth * scale;
     const height = image.naturalHeight * scale;
-    state.draftOverlay = { image, url, opacity: Number(document.getElementById('overlay-opacity').value) / 100, x: (state.width - width) / 2, y: (state.height - height) / 2, width, height };
+    state.draftOverlay = { image, url, file, opacity: Number(document.getElementById('overlay-opacity').value) / 100, x: (state.width - width) / 2, y: (state.height - height) / 2, width, height };
     document.getElementById('overlay-preview-empty').hidden = true;
     document.getElementById('apply-overlay').disabled = false;
     drawOverlayPreview();
@@ -798,6 +767,11 @@
     state.overlays = { watermark: null, template: null };
     state.selected = null;
     state.drag = null;
+    state.currentProjectId = null;
+    state.currentProjectName = '';
+    state.baseImagePath = null;
+    rememberCanvasCreated();
+    projects.markDirty();
     interactionCanvas.style.cursor = 'default';
     renderStrip();
     showCanvas();
@@ -810,7 +784,11 @@
       return;
     }
     const saved = state.savedCanvases.find(item => item.id === state.selectedSavedId);
-    if (saved) loadSavedCanvas(saved, document.getElementById('create-canvas'));
+    if (saved) {
+      const name = saved.name;
+      resizeCanvas();
+      toast(`Loaded ${name} dimensions.`);
+    }
   }
 
   async function init() {
@@ -824,6 +802,11 @@
       return;
     }
     state.companyId = company.id;
+    const projectApp = { state, canvasBlob, closeModal, openModal, renderStrip, rememberCanvasCreated, showCanvas, solidImageColor, toast, guard: null };
+    projects = window.BKImageEditorProjects.create(projectApp);
+    projectApp.guard = window.BKImageEditorUnsavedGuard.create({ closeModal, isDirty: () => state.projectDirty, markDirty: projects.markDirty, openModal, saveBeforeLeave: projects.saveBeforeLeave });
+    projectApp.guard.bind();
+    projects.updateSaveButton();
     if (typeof initNav === 'function') initNav();
     document.getElementById('source-images').addEventListener('change', event => uploadSources(event.target.files).catch(() => toast('One or more images could not be loaded.')));
     const layersList = document.getElementById('layers-list');
@@ -867,39 +850,49 @@
       target.height = target.originalHeight;
       target.x = center.x - target.width / 2;
       target.y = center.y - target.height / 2;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('reset-image-rotation').addEventListener('click', () => {
       const target = activeImage();
       if (!target) return;
       target.rotation = 0;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('reset-image-opacity').addEventListener('click', () => {
       const target = activeImage();
       if (!target) return;
       target.opacity = 1;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('image-opacity').addEventListener('input', event => {
       const target = activeImage();
       if (!target) return;
       target.opacity = Number(event.target.value) / 100;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('flip-image-horizontal').addEventListener('click', () => {
       const target = activeImage();
       if (!target) return;
       target.flipX = !target.flipX;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('flip-image-vertical').addEventListener('click', () => {
       const target = activeImage();
       if (!target) return;
       target.flipY = !target.flipY;
+      projects.markDirty();
       drawCanvas();
     });
     document.getElementById('open-size-modal').addEventListener('click', openSizeModal);
+    document.getElementById('load-canvas-dimensions').addEventListener('click', openSizeModal);
+    document.getElementById('save-canvas-dimensions').addEventListener('click', openSaveDimensions);
+    document.getElementById('confirm-save-dimensions').addEventListener('click', saveDimensions);
+    document.getElementById('saved-dimensions-name').addEventListener('keydown', event => { if (event.key === 'Enter') saveDimensions(); });
     document.getElementById('create-canvas').addEventListener('click', runSizeAction);
     document.getElementById('size-saved-canvases').addEventListener('click', event => {
       const option = event.target.closest('[data-saved-canvas-id]');
@@ -919,21 +912,23 @@
       renderSizeSavedCanvases();
       updateSizeAction();
     }));
-    document.getElementById('open-save-canvas-modal').addEventListener('click', () => {
-      document.getElementById('save-canvas-error').hidden = true;
-      document.getElementById('saved-canvas-name').style.borderColor = '';
-      openModal(document.getElementById('save-canvas-modal'));
-      setTimeout(() => document.getElementById('saved-canvas-name').focus(), 0);
-    });
-    document.getElementById('save-canvas').addEventListener('click', saveCanvas);
-    document.getElementById('saved-canvas-name').addEventListener('keydown', event => { if (event.key === 'Enter') saveCanvas(); });
-    document.getElementById('open-load-canvas-modal').addEventListener('click', () => openSavedCanvases().catch(error => { console.error(error); toast('Saved canvases could not be loaded.'); }));
+    document.getElementById('header-save-canvas').addEventListener('click', projects.openSave);
+    document.getElementById('save-canvas').addEventListener('click', projects.save);
+    document.getElementById('saved-canvas-name').addEventListener('keydown', event => { if (event.key === 'Enter') projects.save(); });
+    document.getElementById('header-load-canvas').addEventListener('click', projects.openLoad);
     document.getElementById('saved-canvases-list').addEventListener('click', event => {
+      const deleteButton = event.target.closest('[data-delete-canvas-id]');
+      if (deleteButton) {
+        const saved = state.savedCanvases.find(item => item.id === deleteButton.dataset.deleteCanvasId);
+        if (saved) projects.openDelete(saved);
+        return;
+      }
       const button = event.target.closest('[data-canvas-id]');
       if (!button) return;
       const saved = state.savedCanvases.find(item => item.id === button.dataset.canvasId);
-      if (saved) loadSavedCanvas(saved, button);
+      if (saved) projects.load(saved, button);
     });
+    document.getElementById('confirm-delete-document').addEventListener('click', projects.remove);
     document.getElementById('open-watermark-modal').addEventListener('click', () => openOverlay('watermark'));
     document.getElementById('open-template-modal').addEventListener('click', () => openOverlay('template'));
     document.getElementById('overlay-file').addEventListener('change', event => loadOverlay(event.target.files[0]).catch(() => toast('The PNG could not be loaded.')));
@@ -947,6 +942,7 @@
       if (!state.draftOverlay || !state.modalType) return;
       state.overlays[state.modalType] = { ...state.draftOverlay };
       state.selected = state.modalType;
+      projects.markDirty();
       closeModal(document.getElementById('overlay-modal'));
       drawCanvas();
       toast(`${state.modalType === 'watermark' ? 'Watermark' : 'Template'} applied to all images.`);
@@ -954,19 +950,23 @@
 
     const color = document.getElementById('background-color');
     const hex = document.getElementById('background-hex');
-    color.addEventListener('input', () => { state.background = color.value.toUpperCase(); hex.value = state.background; drawCanvas(); });
+    color.addEventListener('input', () => { state.background = color.value.toUpperCase(); hex.value = state.background; projects.markDirty(); drawCanvas(); });
     hex.addEventListener('change', () => {
       const value = hex.value.trim();
       if (!/^#[0-9A-F]{6}$/i.test(value)) { hex.value = state.background; return; }
       state.background = value.toUpperCase();
       hex.value = state.background;
       color.value = state.background;
+      projects.markDirty();
       drawCanvas();
     });
 
     document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.editor-modal'))));
     document.querySelectorAll('.editor-modal').forEach(modal => modal.addEventListener('click', event => { if (event.target === modal) closeModal(modal); }));
-    document.addEventListener('keydown', event => { if (event.key === 'Escape') document.querySelectorAll('.editor-modal.open').forEach(closeModal); });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') document.querySelectorAll('.editor-modal.open').forEach(closeModal);
+      deleteSelectedImage(event);
+    });
     interactionCanvas.addEventListener('pointerdown', onCanvasPointerDown);
     interactionCanvas.addEventListener('pointermove', onCanvasPointerMove);
     interactionCanvas.addEventListener('pointerup', onCanvasPointerUp);
@@ -977,7 +977,7 @@
     preview.addEventListener('pointercancel', previewPointerUp);
     new ResizeObserver(() => applyZoom()).observe(document.getElementById('canvas-stage'));
     window.addEventListener('beforeunload', () => state.urls.forEach(URL.revokeObjectURL));
-    openSizeModal();
+    if (!hasCreatedCanvas()) openSizeModal();
   }
 
   document.addEventListener('DOMContentLoaded', () => init().catch(error => console.error(error)));

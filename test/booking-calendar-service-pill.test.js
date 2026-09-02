@@ -10,7 +10,7 @@ test('service-only calendar jobs use an orange installer pill', () => {
   assert.match(source, /category \|\| ''\)\.trim\(\)\.toLowerCase\(\) !== 'service'/);
   assert.match(source, /const isServiceOnly = !hasHardwareProduct/);
   assert.match(source, /installers\.every\(installer => String\(installer\?\.role \|\| ''\)\.trim\(\)\.toLowerCase\(\) === 'service'\)/);
-  assert.match(source, /installerBadgeColor = calendarDoorState\.isServiceOnly \? '#F59E0B' : '#22C55E'/);
+  assert.match(source, /installerBadgeColor = calendarDoorState\.isServiceOnly \? '#F59E0B' : 'var\(--success\)'/);
   assert.match(source, /background:\$\{installerBadgeColor\}/);
   assert.doesNotMatch(source, /completedBadgeColor/);
 });

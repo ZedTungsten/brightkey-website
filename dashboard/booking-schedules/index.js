@@ -843,7 +843,7 @@
           const doorsArr = calendarDoorState.doors;
           const productsArr = calendarDoorState.products;
           const calendarInstallerName = calendarDoorState.installerName;
-          const installerBadgeColor = calendarDoorState.isServiceOnly ? '#F59E0B' : '#22C55E';
+          const installerBadgeColor = calendarDoorState.isServiceOnly ? '#F59E0B' : 'var(--success)';
 
           const allocatedSkus = new Set();
           const anyDoorHasProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
@@ -923,7 +923,7 @@
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
             : (isDeliveryOnly && isFullyDone
-                ? `<span class="calendar-inst-badge" style="background:#22C55E;">${deliveryBadgeText}</span>`
+                ? `<span class="calendar-inst-badge" style="background:var(--success);">${deliveryBadgeText}</span>`
                 : installerBadgeHtml);
 
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');

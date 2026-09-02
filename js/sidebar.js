@@ -1333,7 +1333,7 @@
             picture_link: emp.picture_link,
             status_text: emp.status_text || '',
             unread_count: 0,
-            has_messages: false
+            has_messages: false, last_message_at: null
           };
         });
 
@@ -1346,12 +1346,13 @@
               picture_link: thread.picture_link,
               status_text: '',
               unread_count: 0,
-              has_messages: true
+              has_messages: true, last_message_at: thread.last_message_at || null
             };
           }
           teammatesMap[thread.other_employee_id].status_text = thread.last_message_preview || thread.status_text || teammatesMap[thread.other_employee_id].status_text || '';
           teammatesMap[thread.other_employee_id].unread_count = thread.unread_count || 0;
           teammatesMap[thread.other_employee_id].has_messages = true;
+          teammatesMap[thread.other_employee_id].last_message_at = thread.last_message_at || null;
         });
 
         const unifiedTeammates = Object.values(teammatesMap);
@@ -1365,11 +1366,10 @@
         };
 
         const sorted = [...unifiedTeammates].sort((a, b) => {
-          const scoreA = getPriorityScore(a);
-          const scoreB = getPriorityScore(b);
-          if (scoreA !== scoreB) {
-            return scoreB - scoreA;
-          }
+          const latestA = Date.parse(a.last_message_at || '') || 0, latestB = Date.parse(b.last_message_at || '') || 0;
+          if (latestA !== latestB) return latestB - latestA;
+          const scoreA = getPriorityScore(a), scoreB = getPriorityScore(b);
+          if (scoreA !== scoreB) return scoreB - scoreA;
           const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();
           const nameB = `${b.first_name} ${b.last_name}`.toLowerCase();
           return nameA.localeCompare(nameB);
