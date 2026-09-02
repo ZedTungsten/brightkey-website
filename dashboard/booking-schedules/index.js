@@ -126,6 +126,23 @@
       const installers = hasDoorAssignments
         ? activeDoors.flatMap(door => Array.isArray(door?.installers) ? door.installers : [])
         : bookingInstallers;
+      const activeProducts = products.filter(product => !product?.cancelled);
+      const serviceOnlySkus = new Set(['BACKJOB', 'OCULAR', 'ADD-ON LABOR']);
+      const hasHardwareProduct = activeProducts.some(product => {
+        const sku = String(product?.sku || '').trim().toUpperCase();
+        if (serviceOnlySkus.has(sku)) return false;
+        return String(dbProductsBySku.get(sku)?.category || '').trim().toLowerCase() !== 'service';
+      });
+      const hasServiceProduct = activeProducts.some(product => {
+        const sku = String(product?.sku || '').trim().toUpperCase();
+        return serviceOnlySkus.has(sku)
+          || String(dbProductsBySku.get(sku)?.category || '').trim().toLowerCase() === 'service';
+      });
+      const isServiceOnly = !hasHardwareProduct
+        && (hasServiceProduct || (
+          installers.length > 0
+          && installers.every(installer => String(installer?.role || '').trim().toLowerCase() === 'service')
+        ));
       const installerNames = [];
       const seenInstallers = new Set();
       installers.forEach(installer => {
@@ -141,6 +158,7 @@
         doors,
         products,
         hideFromCalendar: doors.length > 0 && activeDoors.length === 0,
+        isServiceOnly,
         installerName: hasDoorAssignments
           ? installerNames.join(', ')
           : (installerNames.join(', ') || String(booking?.installer_name || '').trim())
@@ -810,6 +828,8 @@
 
         let amHtml = '';
         let pmHtml = '';
+        let amEventHtml = '';
+        let pmEventHtml = '';
 
         dayBookings.forEach(b => {
           const cityStr = String(b.customer_city || '').trim() || getCityFromAddress(b.customer_address);
@@ -823,6 +843,7 @@
           const doorsArr = calendarDoorState.doors;
           const productsArr = calendarDoorState.products;
           const calendarInstallerName = calendarDoorState.installerName;
+          const installerBadgeColor = calendarDoorState.isServiceOnly ? '#F59E0B' : '#22C55E';
 
           const allocatedSkus = new Set();
           const anyDoorHasProducts = doorsArr.some(d => Array.isArray(d.products) && d.products.length > 0);
@@ -890,24 +911,20 @@
             || (isDone && hasMedia)
             || (isDeliveryOnly && isDispatched)
             || isDayOffPassed;
-
-          const activeProductSkus = productsArr
-            .filter(product => !product.cancelled)
-            .map(product => String(product.sku || '').trim().toUpperCase())
-            .filter(Boolean);
-          const isServiceOnly = activeProductSkus.length > 0 && activeProductSkus.every(sku => (
-            String(dbProductsBySku.get(sku)?.category || '').trim().toLowerCase() === 'service'
-          ));
-          const completedBadgeColor = isServiceOnly ? '#F59E0B' : '#22C55E';
+          const isMarkedDone = ['done', 'completed', 'finished'].includes(String(b.status || '').toLowerCase()) || isDone;
+          const checkSvg = '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          const completionMarker = hasMedia
+            ? `<span class="calendar-progress-check media-uploaded" title="All media uploaded" aria-label="All media uploaded">${checkSvg}</span>`
+            : (isMarkedDone ? `<span class="calendar-progress-check" title="Done" aria-label="Done">${checkSvg}</span>` : '');
+          const installerBadgeHtml = calendarInstallerName
+            ? `<span class="calendar-installer-status">${completionMarker}<span class="calendar-inst-badge" style="background:${installerBadgeColor};">${escapeHtml(formatInstallerName(calendarInstallerName))}</span></span>`
+            : '';
 
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
-            : (isFullyDone 
-                ? `<div style="display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
-                     ${isDayOff ? '' : `<span class="calendar-inst-badge" style="background:${completedBadgeColor}; color:#fff; border:none; font-size:0.6rem; margin-top:2px;">${isDeliveryOnly ? deliveryBadgeText : 'Done, Media Uploaded'}</span>`}
-                     ${calendarInstallerName ? `<span class="calendar-inst-badge" style="background:#E4E4E7; color:#71717A; font-size:0.58rem; margin-top:1px;">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''}
-                   </div>`
-                : (calendarInstallerName ? `<span class="calendar-inst-badge">${escapeHtml(formatInstallerName(calendarInstallerName))}</span>` : ''));
+            : (isDeliveryOnly && isFullyDone
+                ? `<span class="calendar-inst-badge" style="background:#22C55E;">${deliveryBadgeText}</span>`
+                : installerBadgeHtml);
 
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `
@@ -938,9 +955,9 @@
           `;
 
           if (isAfternoon(dayEvent.timeSlot)) {
-            pmHtml += slotHtml;
+            pmEventHtml += slotHtml;
           } else {
-            amHtml += slotHtml;
+            amEventHtml += slotHtml;
           }
         });
 
@@ -959,10 +976,10 @@
               ${workPermitPill}
             </div>
             <div class="calendar-half am">
-              ${amHtml}
+              ${amEventHtml}${amHtml}
             </div>
             <div class="calendar-half pm">
-              ${pmHtml}
+              ${pmEventHtml}${pmHtml}
             </div>
           </div>
         `;
