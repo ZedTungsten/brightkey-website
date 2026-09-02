@@ -29,6 +29,20 @@ function formatMaterialLabel(value) {
   return label === 'N/A' ? label : label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function renderHighlightedBookingNotes(value) {
+  const notesElement = document.getElementById('det-notes');
+  const lines = String(value || 'N/A').split(/\r?\n/);
+  const content = [];
+  lines.forEach((line, index) => {
+    const highlightedLine = document.createElement('span');
+    highlightedLine.className = 'booking-note-highlight-line';
+    highlightedLine.textContent = line || '\u00a0';
+    content.push(highlightedLine);
+    if (index < lines.length - 1) content.push(document.createElement('br'));
+  });
+  notesElement.replaceChildren(...content);
+}
+
 // --- Modal Sheets & Lightbox ---
 function openDetailsModal(bookingId) {
   const b = dbBookings.find(booking => booking.id === bookingId);
@@ -99,7 +113,7 @@ function openDetailsModal(bookingId) {
     mapPinEl.textContent = 'No link provided';
   }
 
-  document.getElementById('det-notes').innerText = b.notes || 'N/A';
+  renderHighlightedBookingNotes(b.notes);
 
   const grandTotalVal = b.grand_total || 0;
   const collectTotalGroup = document.getElementById('det-collect-total-group');
