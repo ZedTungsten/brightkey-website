@@ -4,6 +4,17 @@
     async function openBookingReceipt(b, receiptSb, receiptCompanyId, targetWindow) {
       if (!b || !receiptSb || !receiptCompanyId) return;
 
+      const { data: latestBooking, error: bookingError } = await receiptSb
+        .from('installation_bookings')
+        .select('*')
+        .eq('company_id', receiptCompanyId)
+        .eq('id', b.id)
+        .single();
+      if (bookingError || !latestBooking) {
+        throw new Error('The latest receipt details could not be loaded. Please try again.');
+      }
+      b = latestBooking;
+
       const { data: lockedBasis, error: lockError } = await receiptSb.rpc('lock_commission_basis_for_ar', {
         p_booking_id: b.id
       });
