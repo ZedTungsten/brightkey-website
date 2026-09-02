@@ -22,7 +22,7 @@
         throw new Error('The receipt could not be produced because its commission price basis was not locked. Please try again.');
       }
       if (lockedBasis && typeof lockedBasis === 'object') {
-        b = { ...b, ...lockedBasis, commission_basis_snapshot: lockedBasis };
+        b = { ...b, commission_basis_snapshot: lockedBasis };
       }
 
       const pipe = (str) => str ? str.split('|').map(s => s.trim()).filter(Boolean) : [];

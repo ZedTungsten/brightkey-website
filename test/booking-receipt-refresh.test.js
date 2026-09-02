@@ -10,4 +10,6 @@ test('opening a booking receipt reloads the latest persisted invoice fields', ()
   assert.match(source, /\.eq\('id', b\.id\)/);
   assert.match(source, /b = latestBooking;/);
   assert.ok(source.indexOf('b = latestBooking;') < source.indexOf("rpc('lock_commission_basis_for_ar'"));
+  assert.match(source, /b = \{ \.\.\.b, commission_basis_snapshot: lockedBasis \}/);
+  assert.doesNotMatch(source, /b = \{ \.\.\.b, \.\.\.lockedBasis/);
 });
