@@ -139,6 +139,7 @@
   let currentCompanyId = null, tenantBusinesses = [];
   let activeTab = 'basic';
   let catalogSpecDefinitions = [];
+  const isDuplicateSku = sku => allProducts.some(product => product.id !== editingId && String(product.sku || '').trim().toUpperCase() === String(sku || '').trim().toUpperCase());
 
   function specificationInputId(definition) {
     return `f-spec-${definition.id.replace(/_/g, '-')}`;
@@ -372,7 +373,7 @@
   }
   function updateParentSkuDatalist() {
     const dl = document.getElementById('parent-skus-list'); if (!dl) return;
-    const selectedBusiness = document.getElementById('f-business')?.value || '', allSkus = [...new Set(allProducts.filter(p => p.sku && selectedBusiness && p.business === selectedBusiness && p.id !== editingId).map(p => p.sku))]
+    const selectedBusiness = document.getElementById('f-business')?.value || '', allSkus = [...new Set(allProducts.filter(p => p.sku && !p.parent_sku && selectedBusiness && p.business === selectedBusiness && p.id !== editingId).map(p => p.sku))]
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
     dl.innerHTML = allSkus.map(sku => `<option value="${esc(sku)}"></option>`).join('');
   }
@@ -1021,6 +1022,7 @@
     if (skuInp) {
       skuInp.disabled = false;
       skuInp.placeholder = 'e.g. A04';
+      skuInp.style.color = ''; skuInp.style.borderColor = '';
     }
     const slugInp = document.getElementById('f-slug');
     if (slugInp) {
@@ -1652,7 +1654,9 @@
       if (!payload.sku) throw new Error('SKU is required.');
       if (!payload.title) throw new Error('Title is required.');
       if (!payload.business) throw new Error('Business type is required.');
-
+      const skuInput = document.getElementById('f-sku');
+      const skuExists = isDuplicateSku(payload.sku);
+      if (skuExists) { skuInput.style.color = 'var(--danger)'; skuInput.style.borderColor = 'var(--danger)'; skuInput.scrollIntoView({ behavior: 'smooth', block: 'center' }); throw new Error('SKU must be unique. Enter a different SKU.'); }
       let productId = editingId;
 
       if (editingId) {
@@ -1743,9 +1747,6 @@
     document.getElementById('confirm-modal').classList.add('open');
   }
 
-  // ─────────────────────────────────────────────────────
-  // Duplicate Product
-  // ─────────────────────────────────────────────────────
   async function duplicateProduct(id) {
     isLoadingDrawer = true;
     editingId = null;
@@ -1757,15 +1758,13 @@
     const p = allProducts.find(x => x.id === id);
     if (p) {
       const pDup = { ...p };
-      delete pDup.sku;
       delete pDup.slug;
-
       fillForm(pDup);
+      document.getElementById('f-sku').dispatchEvent(new Event('input'));
     }
 
     updateDrawerNavigation();
     document.getElementById('drawer-title').textContent = 'Duplicate Product';
-
     const statusEl = document.getElementById('drawer-status');
     if (statusEl) {
       statusEl.textContent = 'Loading…';
@@ -2628,7 +2627,7 @@
         document.getElementById('f-sku').value
       );
     };
-    document.getElementById('f-sku').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase(); updateGeneratedSlug(); });
+    document.getElementById('f-sku').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase(); const duplicate = isDuplicateSku(event.target.value); event.target.style.color = duplicate ? 'var(--danger)' : ''; event.target.style.borderColor = duplicate ? 'var(--danger)' : ''; updateGeneratedSlug(); });
     document.getElementById('f-title').addEventListener('input', updateGeneratedSlug);
 
     // Business change → re-render features tab

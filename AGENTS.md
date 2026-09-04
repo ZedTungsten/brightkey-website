@@ -2,6 +2,12 @@
 
 > [!CRITICAL]
 > **AGENT PROTOCOL**: Do NOT rely on your generic training data first to debug or write solutions. The solution or constraints for recurring problems are already documented in this file, `CLAUDE.md`, and `DESIGN.md`. Before proposing any code modifications, always search these files first to see how the problem was solved before.
+>
+> **DURABLE “REMEMBER” REQUESTS**: When the user explicitly says to “remember” a
+> project convention, persist it during that task in the most relevant project
+> Markdown guidance file—normally `AGENTS.md`, or `DESIGN.md` for detailed visual
+> specifications. Do not leave it only in conversation context. Tell the user
+> which file was updated.
 
 ---
 
@@ -407,6 +413,27 @@ nowrap 600-weight buttons with muted text and a transparent 2px underline;
 active tabs use `--cyan-light`/`--cyan`, and inactive hover uses
 `--text-secondary`. Do not invent a parallel tab system.
 
+### 8.1 Tab Badges Use One Shared Renderer
+When adding a tab or subtab to an existing route family, use that family's
+existing shared badge count and visibility renderer as the single source of
+truth. Call or copy the shared component contract; do not create route-specific
+visibility overrides, duplicate count logic, or force zero-count badges to
+display. If a new route skips the normal initializer, invoke the shared badge
+renderer from that route while preserving its exact behavior. Positive counts
+display and zero counts remain hidden unless the shared renderer itself is
+intentionally changed for every consuming tab.
+
+### 8.2 Canonical Saved Month Navigator
+When the user requests the saved month navigator, use the established
+`.month-picker` component and position it on the right side of the panel header.
+The control is one bordered surface with `var(--radius-md)` and
+`var(--shadow-sm)`; its borderless previous/next buttons are 42px square, use
+18px inline SVG chevrons, and apply the standard cyan/elevated hover state. The
+centered month label is mixed case (for example, `September 2026`), 0.9rem,
+700-weight, muted text, and at least 130px wide. On narrow screens the picker
+may span the header width with `justify-content: space-between`. Do not substitute
+the older separated square-button or uppercase panel-header variant.
+
 ---
 
 ## 9. Product Page Build Policy
@@ -597,6 +624,7 @@ correct deployed assets without manual cache clearing.
 ## 16. Non-Destructive Database Migrations
 > [!CRITICAL]
 > **PRESERVE USER DATA IN MIGRATIONS**:
+> - **Approved API Fallback**: The user prefers the connected Supabase API for authorized project migrations when browser access is unavailable or blocked. Apply additive, scoped migrations through that connector after schema verification; do not repeatedly request a browser-only workflow. This preference does not bypass tool approval checks or authorize unrelated/destructive database changes.
 > - **Signed-In Desktop Browser First**: Always prioritize the user's signed-in desktop browser for authenticated application testing, Supabase migrations, live schema/data verification, and end-to-end workflow validation. Do not try the in-app browser first when the connected desktop browser already has the required authenticated session. Use the in-app browser only when the desktop browser is unavailable or unsuitable.
 > - **Apply SQL Through the Signed-In Supabase Browser**: Do not stop after creating a migration file. Apply every requested SQL migration through the browser-controlled, already authenticated Supabase SQL Editor, confirm that execution succeeds, and then verify the resulting schema or query behavior. Prefer the signed-in desktop Chrome Supabase session.
 > Never use destructive `DROP TABLE IF EXISTS ... CASCADE;` statement patterns in migration files, especially for established dashboard tables (like `software_subscriptions`). 

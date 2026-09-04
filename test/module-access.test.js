@@ -60,7 +60,7 @@ test('every module page is gated by its assigned module, including shared pages'
     Logistics: [
       'dashboard/logistics-calendar/calendar.html',
       'dashboard/logistics-calendar/all-orders.html',
-      'dashboard/warehouse/inspect.html',
+      'dashboard/warehouse/inspected.js',
       'dashboard/warehouse/pack.html',
       'dashboard/warehouse/dispatch.html',
       'dashboard/warehouse/receive.html',

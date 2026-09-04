@@ -659,9 +659,24 @@
           ...door.other_media
         ])];
 
+        door.completed = Boolean(door.signature) && doorHasCompletionMedia(door);
+        door.completed_at = door.completed ? (door.completed_at || new Date().toISOString()) : null;
+
+        let productsArr = [];
+        if (typeof selectedBooking.products === 'string') {
+          try { productsArr = JSON.parse(selectedBooking.products); } catch (_) {}
+        } else if (Array.isArray(selectedBooking.products)) {
+          productsArr = selectedBooking.products;
+        }
+        const allDoorsCompleted = doorsArr.length > 0 && doorsArr.every((candidateDoor, candidateIndex) => (
+          isDoorCompletedForDisplay(selectedBooking, candidateDoor, candidateIndex, doorsArr, productsArr)
+        ));
+        const updatePayload = { doors: doorsArr };
+        if (allDoorsCompleted) updatePayload.status = 'completed';
+
         const { data: savedBooking, error } = await sb
           .from('installation_bookings')
-          .update({ doors: doorsArr })
+          .update(updatePayload)
           .eq('id', selectedBooking.id)
           .eq('company_id', currentCompanyId)
           .select('id')
@@ -673,7 +688,9 @@
         const idx = dbBookings.findIndex(b => b.id === selectedBooking.id);
         if (idx !== -1) {
           dbBookings[idx].doors = doorsArr;
+          if (allDoorsCompleted) dbBookings[idx].status = 'completed';
           selectedBooking.doors = doorsArr;
+          if (allDoorsCompleted) selectedBooking.status = 'completed';
         }
 
         validateAndToggleSubmit();

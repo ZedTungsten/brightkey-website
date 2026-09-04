@@ -419,31 +419,41 @@
       return value && typeof value === 'object' && value.sets && typeof value.sets === 'object' ? value.sets : {};
     }
 
-    function useBookingWorkflowForDoor(booking, door) {
-      let doors = [];
-      if (Array.isArray(booking?.doors)) doors = booking.doors;
-      else if (typeof booking?.doors === 'string') {
-        try { doors = JSON.parse(booking.doors); } catch (_) {}
-      }
-      let bookingInstallers = [];
-      if (Array.isArray(booking?.installers)) bookingInstallers = booking.installers;
-      else if (typeof booking?.installers === 'string') {
-        try { bookingInstallers = JSON.parse(booking.installers); } catch (_) {}
-      }
+    function parseBookingArray(value) {
+      if (Array.isArray(value)) return value;
+      if (typeof value !== 'string') return [];
+      try { return JSON.parse(value); } catch (_) { return []; }
+    }
+
+    function getBookingWorkflowKeyForDoor(booking, door) {
+      const doors = parseBookingArray(booking?.doors);
+      const bookingInstallers = parseBookingArray(booking?.installers);
       const allInstallers = [...bookingInstallers, ...doors.flatMap(item => Array.isArray(item?.installers) ? item.installers : [])];
       const hasLead = allInstallers.some((installer, index) => String(installer?.role || (index === 0 ? 'lead' : 'assist')).toLowerCase() === 'lead');
-      let key = 'lead';
-      if (!hasLead) {
-        let products = [];
-        if (Array.isArray(booking?.products)) products = booking.products;
-        else if (typeof booking?.products === 'string') {
-          try { products = JSON.parse(booking.products); } catch (_) {}
-        }
-        const attached = Array.isArray(door?.products) ? door.products : [];
-        const candidates = [...attached, ...products.filter(product => !product?.cancelled).map(product => product?.sku)];
-        const serviceSku = candidates.map(value => String(value || '').trim().toUpperCase()).find(sku => dbProductsBySku.get(sku)?.category === 'Service');
-        key = `service:${serviceSku || 'UNSPECIFIED'}`;
-      }
+      if (hasLead) return 'lead';
+      const products = parseBookingArray(booking?.products);
+      const attached = Array.isArray(door?.products) ? door.products : [];
+      const candidates = [...attached, ...products.filter(product => !product?.cancelled).map(product => product?.sku)];
+      const serviceSku = candidates.map(value => String(value || '').trim().toUpperCase()).find(sku => dbProductsBySku.get(sku)?.category === 'Service');
+      return `service:${serviceSku || 'UNSPECIFIED'}`;
+    }
+
+    function doorHasCompletionMedia(door) {
+      if (!door) return false;
+      const requiredMedia = door.required_media && typeof door.required_media === 'object'
+        ? Object.values(door.required_media)
+        : [];
+      return [...(door.media_urls || []), ...requiredMedia, ...(door.other_media || [])]
+        .some(url => typeof url === 'string' && url.trim());
+    }
+
+    function isDoorCompletedForDisplay(booking, door, doorIndex, doors, products) {
+      return Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
+        || (Boolean(door?.signature) && doorHasCompletionMedia(door));
+    }
+
+    function useBookingWorkflowForDoor(booking, door) {
+      const key = getBookingWorkflowKeyForDoor(booking, door);
       bookingChecklist = Array.isArray(bookingChecklistSets[key]) ? bookingChecklistSets[key] : [];
       bookingMediaRequirements = Array.isArray(bookingMediaRequirementSets[key]) ? bookingMediaRequirementSets[key] : [];
       return key;
@@ -669,7 +679,7 @@
 
       const bookingMarkedDone = ['done', 'completed', 'finished'].includes(bookingStatus);
       const allDoorsMarkedDone = doors.length > 0 && doors.every((door, doorIndex) => (
-        Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
+        isDoorCompletedForDisplay(booking, door, doorIndex, doors, products)
       ));
 
       return bookingMarkedDone || allDoorsMarkedDone ? 'Done' : 'Scheduled';
@@ -883,7 +893,7 @@
           });
 
           const isDone = !hasUnallocatedActiveLocks && doorsArr.length > 0 && doorsArr.every((door, doorIndex) => (
-            door.completed || isDoorCancelledForCompletion(door, doorIndex, doorsArr, productsArr)
+            isDoorCompletedForDisplay(b, door, doorIndex, doorsArr, productsArr)
           ));
 
           const todayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
@@ -891,7 +901,7 @@
           const isDayOffPassed = isDayOff && (b.scheduled_date <= todayStr);
 
           const hasMedia = !hasUnallocatedActiveLocks && (isDayOffPassed || (doorsArr.length > 0 && doorsArr.every((door, doorIndex) => (
-            (door.media_urls && door.media_urls.length > 0)
+            doorHasCompletionMedia(door)
             || isDoorCancelledForCompletion(door, doorIndex, doorsArr, productsArr)
           ))));
 

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Warehouse Inspected — Brightkey Admin</title>
+  <link rel="preconnect" href="https://fonts.bunny.net" />
+  <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/dashboard/warehouse/shared.css?v=20260903-1" />
+  <link rel="stylesheet" href="/dashboard/warehouse/inspected.css?v=20260903-pagination" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body class="inspected-page">
+  <div class="toast-container" id="toast-container"></div>
+  <div class="dash-layout">
+    <aside class="dash-sidebar" id="dash-sidebar"></aside>
+    <div class="dash-main">
+      <div class="page-wrap">
+        <header class="top-bar">
+          <span class="top-bar-title">Warehouse &amp; Inventory Ledger</span>
+          <div class="top-bar-actions">
+            <button class="btn btn-primary" id="create-inspect-btn" type="button">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Create New Inspect
+            </button>
+          </div>
+        </header>
+        <div class="content-area">
+          <main class="main-workspace">
+            <nav class="drawer-tabs" aria-label="Warehouse workflow">
+              <a class="tab-btn active" href="/dashboard/warehouse/inspected/in-stock">Inspected</a>
+              <a class="tab-btn" href="/dashboard/warehouse/pack">Pack <span id="badge-count-pack" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/dispatch">Dispatch <span id="badge-count-dispatch" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
+              <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
+              <a class="tab-btn" href="/dashboard/warehouse/return">Return</a>
+              <a class="tab-btn" href="/dashboard/warehouse/damaged">Damaged</a>
+            </nav>
+            <nav class="drawer-tabs inspected-subtabs" aria-label="Inspected inventory views">
+              <a class="tab-btn" id="in-stock-subtab" href="/dashboard/warehouse/inspected/in-stock">In Stock</a>
+              <a class="tab-btn" id="deployed-subtab" href="/dashboard/warehouse/inspected/deployed">Deployed</a>
+            </nav>
+            <div class="table-scroll">
+              <section class="tab-panel active" id="in-stock-panel">
+                <div class="panel">
+                  <div class="panel-header">Inspected</div>
+                  <div class="table-responsive">
+                    <table class="ledger-table">
+                      <thead><tr><th>Code</th><th>SKU</th><th>Media</th><th>Inspected by</th><th>Date Inspected</th></tr></thead>
+                      <tbody id="inspected-list"><tr><td colspan="5"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading inspected records...</span></div></td></tr></tbody>
+                    </table>
+                  </div>
+                  <footer class="inspected-pagination" id="inspected-pagination" hidden>
+                    <span id="inspected-page-status" aria-live="polite"></span>
+                    <div class="inspected-page-actions">
+                      <button class="btn btn-outline btn-sm" id="inspected-prev-page" type="button">Previous</button>
+                      <div class="inspected-page-numbers" id="inspected-page-numbers" aria-label="Inspection pages"></div>
+                      <button class="btn btn-outline btn-sm" id="inspected-next-page" type="button">Next</button>
+                    </div>
+                  </footer>
+                </div>
+              </section>
+              <section class="tab-panel" id="deployed-panel" hidden>
+                <div class="panel">
+                  <div class="panel-header deployed-panel-header">
+                    <span>Deployed</span>
+                    <div class="month-picker" aria-label="Deployed month">
+                      <button id="deployed-prev-month" type="button" aria-label="Previous month">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+                      <span id="deployed-month-label"></span>
+                      <button id="deployed-next-month" type="button" aria-label="Next month">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="deployed-empty">Deployed records will appear here.</div>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="inspect-create-modal" aria-hidden="true" inert>
+    <form class="modal-card" id="inspect-create-form" novalidate>
+      <div class="modal-header">
+        <h2 class="modal-title">Create New Inspect</h2>
+        <button class="modal-close" type="button" data-close="inspect-create-modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="inspect-business">Business <span class="required">*</span></label>
+          <select class="form-select" id="inspect-business" required><option value="" disabled selected hidden>Select Business</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inspect-sku">SKU <span class="required">*</span></label>
+          <input class="form-input" id="inspect-sku" list="inspect-sku-options" autocomplete="off" placeholder="Choose a business first" required disabled />
+          <datalist id="inspect-sku-options"></datalist>
+          <div class="inspection-guide-action" id="inspection-guide-action" hidden>
+            <button class="btn btn-primary" id="view-inspection-guide-btn" type="button">View Inspection Guideline</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inspect-media">Upload Media <span class="required">*</span></label>
+          <div class="media-picker">
+            <input id="inspect-media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple />
+            <p class="field-help">Up to 5 images or videos. Images: 15 MB each and compressed to JPEG. Videos: 25 MB each.</p>
+            <div class="selected-media-list" id="selected-media-list"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inspect-code">Code <span class="required">*</span></label>
+          <input class="form-input" id="inspect-code" type="text" maxlength="64" autocomplete="off" placeholder="ENTER CODE" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inspect-employee">Inspected by <span class="required">*</span></label>
+          <select class="form-select" id="inspect-employee" required><option value="" disabled selected hidden>Select Warehouse Member</option></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close="inspect-create-modal">Cancel</button>
+        <button class="btn btn-done" id="inspect-done-btn" type="submit">Done</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-overlay" id="inspect-gallery-modal" aria-hidden="true" inert>
+    <div class="modal-card gallery-card" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="gallery-title">Media Uploaded</h2>
+        <button class="modal-close" type="button" data-close="inspect-gallery-modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body"><div class="gallery-grid" id="inspect-gallery"></div></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="inspection-guideline-modal" aria-hidden="true" inert>
+    <div class="modal-card guideline-card" role="dialog" aria-modal="true" aria-labelledby="inspection-guideline-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="inspection-guideline-title">Inspection Guideline</h2>
+        <button class="modal-close" type="button" data-close="inspection-guideline-modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body" id="inspection-guideline-content"></div>
+    </div>
+  </div>
+
+  <script src="/js/auth.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260904-exclude-damaged-pack"></script>
+  <script src="/dashboard/warehouse/inspected.js?v=20260903-pagination"></script>
+</body>
+</html>

@@ -116,7 +116,6 @@ window.WarehousePage = {
       'inventory-list', 
       'dispatch-list', 
       'pack-list', 
-      'inspect-list', 
       'receive-list', 
       'supplier-product-list', 
       'transfer-requests-list'
@@ -209,6 +208,12 @@ window.WarehousePage = {
   // 10. Update Badge Counts
   updateBadgeCounts: async function() {
     const allProds = this.allProducts || [];
+    const getPackCount = () => [...new Set(this.activeTransactions.filter(transaction =>
+      !String(transaction.reference_id || '').toUpperCase().startsWith('SND-DMG-') &&
+      (transaction.status === 'inspect' || (transaction.status === 'reserved' && this.bookings.some(booking => booking.order_no === transaction.reference_id))) &&
+      transaction.type === 'customer_order' &&
+      !window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))
+    ).map(transaction => transaction.reference_id))].length;
     const getDispatchCount = () => [...new Set(this.activeTransactions.filter(transaction => {
       if (transaction.status !== 'packed' || !transaction.reference_id) return false;
       if (window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))) return false;
@@ -220,10 +225,9 @@ window.WarehousePage = {
       return !hasUnpacked;
     }).map(transaction => transaction.reference_id))].length;
 
-    const renderBadges = (receive, inspect, pack, dispatch) => {
+    const renderBadges = (receive, pack, dispatch) => {
       const badges = [
         { id: 'badge-count-receive', count: receive },
-        { id: 'badge-count-inspect', count: inspect },
         { id: 'badge-count-pack', count: pack },
         { id: 'badge-count-dispatch', count: dispatch }
       ];
@@ -251,24 +255,12 @@ window.WarehousePage = {
 
         if (!error && data && data.length > 0) {
           const row = data[0];
-          const inspectCount = document.getElementById('inspect-list')
-            ? [...new Set(this.activeTransactions.filter(transaction => (
-              transaction.status === 'reserved' &&
-              transaction.type === 'customer_order' &&
-              transaction.reference_id &&
-              !window.isNonInventoryItem(
-                transaction.sku,
-                this.allProducts.find(product => product.sku === transaction.sku)
-              )
-            )).map(transaction => transaction.reference_id))].length
-            : Number(row.inspect_count || 0);
           const dispatchCount = document.getElementById('dispatch-list')
             ? getDispatchCount()
             : Number(row.dispatch_count || 0);
           renderBadges(
             Number(row.receive_count || 0),
-            inspectCount,
-            Number(row.pack_count || 0),
+            document.getElementById('pack-list') ? getPackCount() : Number(row.pack_count || 0),
             dispatchCount
           );
           return;
@@ -295,20 +287,11 @@ window.WarehousePage = {
       if (!['ordered', 'returned'].includes(t.status)) return false;
       return t.type !== 'supplier_order';
     }).length + (this.warehouseTransfers || []).filter(tr => tr.status === 'approved' && tr.to_warehouse_id === this.activeWarehouseId).length;
-    const inspectCount = [...new Set(this.activeTransactions.filter(t => 
-      t.status === 'reserved' && 
-      t.type === 'customer_order' &&
-      !window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))
-    ).map(t => t.reference_id))].length;
-    const packCount = [...new Set(this.activeTransactions.filter(t => 
-      t.status === 'inspect' && 
-      t.type === 'customer_order' &&
-      !window.isNonInventoryItem(t.sku, allProds.find(p => p.sku === t.sku))
-    ).map(t => t.reference_id))].length;
+    const packCount = getPackCount();
     
     const dispatchCount = getDispatchCount();
 
-    renderBadges(receiveCount, inspectCount, packCount, dispatchCount);
+    renderBadges(receiveCount, packCount, dispatchCount);
   },
 
   // 11. AutoSync Bookings Background Launcher
