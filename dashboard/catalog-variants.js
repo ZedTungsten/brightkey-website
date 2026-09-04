@@ -58,6 +58,15 @@
     },
     async syncChildren({ client, companyId, business, parentSku, variantName }) {
       return client.from('products').update({ variant_name: variantName }).eq('company_id', companyId).eq('business', business).ilike('parent_sku', parentSku);
+    },
+    async refreshAfterSave(products, editingId, payload, refreshers) {
+      const savedProduct = products.find(product => product.id === editingId);
+      if (savedProduct) Object.assign(savedProduct, payload);
+      try {
+        for (const refresh of refreshers) await refresh();
+      } catch (error) {
+        console.warn('Product saved, but the catalog list could not be refreshed:', error);
+      }
     }
   });
 })(globalThis);

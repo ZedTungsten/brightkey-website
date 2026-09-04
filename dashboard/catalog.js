@@ -706,7 +706,7 @@
 
     try {
       // Load features
-      if (p && p.business && FEATURE_DEFS[p.business]) {
+      if (p && p.business && FEATURE_DEFS[p.business]?.table) {
         const featureDef = FEATURE_DEFS[p.business];
         const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
         if (fData) {
@@ -902,7 +902,7 @@
 
     const bizValues = selectedProducts.map(p => p.business);
     const uniqueBiz = [...new Set(bizValues)];
-    if (uniqueBiz.length === 1 && uniqueBiz[0] && FEATURE_DEFS[uniqueBiz[0]]) {
+    if (uniqueBiz.length === 1 && uniqueBiz[0] && FEATURE_DEFS[uniqueBiz[0]]?.table) {
       const business = uniqueBiz[0];
       const featureDef = FEATURE_DEFS[business];
       renderFeaturesTab(business);
@@ -1626,7 +1626,7 @@
         if (touchedFields.has('features')) {
           const business = document.getElementById('f-business').value;
           const featureDef = FEATURE_DEFS[business];
-          if (featureDef) {
+          if (featureDef?.table) {
             const featData = collectFeatures(business);
             for (const productId of selectedProductIds) {
               const { data: existing } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).limit(1).maybeSingle();
@@ -1679,7 +1679,7 @@
       // Save features
       const business = payload.business;
       const featureDef = FEATURE_DEFS[business];
-      if (featureDef) {
+      if (featureDef?.table) {
         const featData = collectFeatures(business);
         featData.product_id = productId;
 
@@ -1708,7 +1708,7 @@
       } else {
         updateDrawerNavigation();
         // Resolve editingFeatureId in case it was a new insert
-        if (featureDef) {
+        if (featureDef?.table) {
           const { data: fData } = await sbClient.from(featureDef.table).select('id').eq('product_id', productId).limit(1).maybeSingle();
           if (fData) {
             editingFeatureId = fData.id;
@@ -1776,7 +1776,7 @@
     switchTab('basic');
 
     try {
-      if (p && p.business && FEATURE_DEFS[p.business]) {
+      if (p && p.business && FEATURE_DEFS[p.business]?.table) {
         const featureDef = FEATURE_DEFS[p.business];
         const { data: fData } = await sbClient.from(featureDef.table).select('*').eq('product_id', id).limit(1).maybeSingle();
         if (fData) {
@@ -2133,7 +2133,7 @@
             const key = biz.name.toLowerCase().replace(/[\s_.-]+/g, '_');
             if (!FEATURE_DEFS[key]) {
               FEATURE_DEFS[key] = {
-                table: key.replace(/_/g, '') + '_features',
+                table: null,
                 label: biz.name,
                 features: []
               };
@@ -2689,7 +2689,7 @@
 
           const business = payload.business;
           const featureDef = FEATURE_DEFS[business];
-          if (featureDef) {
+          if (featureDef?.table) {
             const featData = collectFeatures(business);
             featData.product_id = editingId;
 
@@ -2713,17 +2713,16 @@
             }
           }
 
-          // Quietly refresh list
-          await fetchProducts();
-
           setAutosavingState(false);
 
           if (statusEl) {
             statusEl.textContent = 'Saved Changes!';
             statusEl.style.color = 'var(--success)';
           }
+
+          await window.BKCatalogVariants.refreshAfterSave(allProducts, editingId, payload, [updateParentSkuDatalist, updateStats, populateCategoryFilter, applyFilters, checkUnpublishedChanges]);
         } catch (err) {
-          console.error('Autosave failed:', err);
+          console.error('Autosave failed:', JSON.stringify(err), err);
           setAutosavingState(false);
           if (statusEl) {
             statusEl.textContent = 'Autosave failed. Review the product details and try again.';
