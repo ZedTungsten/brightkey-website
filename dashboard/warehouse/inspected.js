@@ -17,10 +17,23 @@
   let selectedGuideline = null;
   let currentPage = 0;
   let totalRecords = 0;
+  let selectedRecord = null;
+  let editExistingMediaUrls = [];
+  let editSelectedFiles = [];
   let skuSearchTimer;
   let guidelineRequestId = 0;
+  let generatedCodeSku = '';
   const modalReturnFocus = new WeakMap();
-  const activeView = window.location.pathname.replace(/\/+$/, '').endsWith('/deployed') ? 'deployed' : 'in-stock';
+  const initialUrl = new URL(window.location.href);
+  const requestedView = initialUrl.searchParams.get('view');
+  if (['in-stock', 'deployed'].includes(requestedView) && /\/dashboard\/warehouse\/inspected-page(?:\.html)?\/?$/.test(initialUrl.pathname)) {
+    initialUrl.searchParams.delete('view');
+    const remainingQuery = initialUrl.searchParams.toString();
+    window.history.replaceState(null, '', `/dashboard/warehouse/inspected/${requestedView}${remainingQuery ? `?${remainingQuery}` : ''}${initialUrl.hash}`);
+  }
+  const activeView = requestedView === 'deployed' || window.location.pathname.replace(/\/+$/, '').endsWith('/deployed')
+    ? 'deployed'
+    : 'in-stock';
   let deployedMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   const byId = id => document.getElementById(id);
@@ -219,7 +232,39 @@
       option.value = product.sku;
       datalist.appendChild(option);
     });
+    updateGeneratedCode();
     await updateGuidelineAvailability();
+  }
+
+  function randomCodeSuffix() {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const values = crypto.getRandomValues(new Uint8Array(3));
+    return [...values].map(value => alphabet[value % alphabet.length]).join('');
+  }
+
+  function generateInspectionCode(sku) {
+    const compactSku = String(sku).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const today = new Date();
+    const date = [today.getMonth() + 1, today.getDate(), String(today.getFullYear()).slice(-2)]
+      .map(value => String(value).padStart(2, '0'))
+      .join('');
+    return `${compactSku}-${date}-${randomCodeSuffix()}`;
+  }
+
+  function updateGeneratedCode() {
+    const sku = byId('inspect-sku').value.trim().toUpperCase();
+    const product = productResults.find(item => String(item.sku || '').trim().toUpperCase() === sku);
+    const codeInput = byId('inspect-code');
+    if (!product) {
+      generatedCodeSku = '';
+      codeInput.value = '';
+      return;
+    }
+    if (generatedCodeSku !== sku || !codeInput.value) {
+      generatedCodeSku = sku;
+      codeInput.value = generateInspectionCode(product.sku);
+    }
+    codeInput.classList.remove('form-error');
   }
 
   function clearGuideline() {
@@ -396,7 +441,7 @@
     if (!records.length) {
       const row = document.createElement('tr');
       const cell = document.createElement('td');
-      cell.colSpan = 5;
+      cell.colSpan = 6;
       cell.className = 'empty-cell';
       cell.textContent = 'No inspected records yet.';
       row.appendChild(cell);
@@ -416,9 +461,198 @@
       row.appendChild(mediaCell);
       appendCell(row, record.inspected_by_name);
       appendCell(row, new Date(record.inspected_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }));
+      const actionCell = document.createElement('td');
+      const actions = document.createElement('div');
+      actions.className = 'record-actions';
+      const editButton = document.createElement('button');
+      editButton.className = 'record-action';
+      editButton.type = 'button';
+      editButton.title = 'Edit';
+      editButton.setAttribute('aria-label', `Edit ${record.code}`);
+      editButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>';
+      editButton.addEventListener('click', () => openEditModal(record));
+      const deleteButton = document.createElement('button');
+      deleteButton.className = 'record-action delete';
+      deleteButton.type = 'button';
+      deleteButton.title = 'Delete';
+      deleteButton.setAttribute('aria-label', `Delete ${record.code}`);
+      deleteButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>';
+      deleteButton.addEventListener('click', () => openDeleteModal(record));
+      actions.append(editButton, deleteButton);
+      actionCell.appendChild(actions);
+      row.appendChild(actionCell);
       body.appendChild(row);
     });
     renderPagination();
+  }
+
+  function openEditModal(record) {
+    selectedRecord = record;
+    editExistingMediaUrls = [...(record.media_urls || [])];
+    editSelectedFiles = [];
+    byId('inspect-edit-code').textContent = record.code;
+    const editSelect = byId('inspect-edit-employee');
+    editSelect.replaceChildren(...[...byId('inspect-employee').options].map(option => option.cloneNode(true)));
+    if (![...editSelect.options].some(option => option.value === record.inspected_by)) {
+      const historical = document.createElement('option');
+      historical.value = record.inspected_by || '';
+      historical.textContent = record.inspected_by_name;
+      editSelect.appendChild(historical);
+    }
+    editSelect.value = record.inspected_by || '';
+    byId('inspect-edit-media').value = '';
+    renderEditMedia();
+    openModal('inspect-edit-modal');
+  }
+
+  function removeButton(label, onClick, className = 'remove-media') {
+    const button = document.createElement('button');
+    button.className = className;
+    button.type = 'button';
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+    button.addEventListener('click', onClick);
+    return button;
+  }
+
+  function renderEditMedia() {
+    const existingList = byId('inspect-edit-existing-media');
+    const newList = byId('inspect-edit-new-media');
+    existingList.replaceChildren();
+    newList.replaceChildren();
+    editExistingMediaUrls.forEach((url, index) => {
+      const safeUrl = approvedGuideImageUrl(url);
+      if (!safeUrl) return;
+      const item = document.createElement('div');
+      item.className = 'edit-media-item';
+      const media = /\.(mp4|mov|webm)(?:\?|$)/i.test(url)
+        ? document.createElement('video')
+        : document.createElement('img');
+      if (media instanceof HTMLVideoElement) {
+        media.controls = true;
+        media.preload = 'metadata';
+      } else {
+        media.alt = `Uploaded inspection media ${index + 1}`;
+      }
+      media.src = safeUrl;
+      item.append(media, removeButton(`Remove uploaded media ${index + 1}`, () => {
+        editExistingMediaUrls.splice(index, 1);
+        renderEditMedia();
+      }, 'edit-media-remove'));
+      existingList.appendChild(item);
+    });
+    editSelectedFiles.forEach((file, index) => {
+      const row = document.createElement('div');
+      row.className = 'selected-media-item';
+      const name = document.createElement('span');
+      name.className = 'selected-media-name';
+      name.textContent = file.name;
+      row.append(mediaIcon(VIDEO_TYPES.has(file.type)), name, removeButton(`Remove ${file.name}`, () => {
+        editSelectedFiles.splice(index, 1);
+        renderEditMedia();
+      }));
+      newList.appendChild(row);
+    });
+    byId('inspect-edit-media-picker').classList.remove('form-error');
+  }
+
+  function handleEditMediaSelection(event) {
+    const incoming = [...event.target.files];
+    if (editExistingMediaUrls.length + editSelectedFiles.length + incoming.length > MAX_MEDIA) {
+      showToast('Keep up to 5 media files only.', true);
+      event.target.value = '';
+      return;
+    }
+    const error = incoming.map(validateFile).find(Boolean);
+    if (error) {
+      showToast(error, true);
+      event.target.value = '';
+      return;
+    }
+    editSelectedFiles.push(...incoming);
+    event.target.value = '';
+    renderEditMedia();
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!selectedRecord) return;
+    const employeeSelect = byId('inspect-edit-employee');
+    const employeeOption = employeeSelect.selectedOptions[0];
+    const code = selectedRecord.code;
+    const mediaCount = editExistingMediaUrls.length + editSelectedFiles.length;
+    employeeSelect.classList.toggle('form-error', !employeeOption?.value);
+    byId('inspect-edit-media-picker').classList.toggle('form-error', mediaCount < 1 || mediaCount > MAX_MEDIA);
+    if (!code || !employeeOption?.value || mediaCount < 1 || mediaCount > MAX_MEDIA) {
+      showToast('Enter a code, select a Warehouse Member, and keep between 1 and 5 media files.', true);
+      return;
+    }
+    const button = byId('inspect-edit-save');
+    button.disabled = true;
+    button.textContent = 'Saving...';
+    const uploaded = [];
+    try {
+      for (const file of editSelectedFiles) uploaded.push(await uploadMedia(file));
+      const mediaUrls = [...editExistingMediaUrls, ...uploaded];
+      const { data, error } = await sb.from('warehouse_inspections')
+        .update({ code, inspected_by: employeeOption.value, inspected_by_name: employeeOption.textContent.trim(), media_urls: mediaUrls })
+        .eq('id', selectedRecord.id)
+        .eq('company_id', companyId)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('The inspected product was not available to update.');
+      const removedUrls = (selectedRecord.media_urls || []).filter(url => !editExistingMediaUrls.includes(url));
+      closeModal('inspect-edit-modal');
+      selectedRecord = null;
+      await removeUploads(removedUrls);
+      showToast('Inspected product updated.');
+      await loadRecords(currentPage);
+    } catch (error) {
+      console.error(error);
+      await removeUploads(uploaded);
+      showToast(error?.code === '23505' ? 'That inspection code already exists.' : 'The inspected product could not be updated.', true);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Save';
+    }
+  }
+
+  function openDeleteModal(record) {
+    selectedRecord = record;
+    byId('inspect-delete-message').textContent = `Are you sure you want to delete ${record.code}? This action cannot be undone.`;
+    openModal('inspect-delete-modal');
+  }
+
+  async function confirmDelete() {
+    if (!selectedRecord) return;
+    const record = selectedRecord;
+    const button = byId('inspect-delete-confirm');
+    button.disabled = true;
+    button.textContent = 'Deleting...';
+    try {
+      const { data, error } = await sb.from('warehouse_inspections')
+        .delete()
+        .eq('id', record.id)
+        .eq('company_id', companyId)
+        .select('id')
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('The inspected product was not available to delete.');
+      closeModal('inspect-delete-modal');
+      selectedRecord = null;
+      await removeUploads(record.media_urls || []);
+      showToast('Inspected product deleted.');
+      const nextPage = records.length === 1 && currentPage > 0 ? currentPage - 1 : currentPage;
+      await loadRecords(nextPage);
+    } catch (error) {
+      console.error(error);
+      showToast('The inspected product could not be deleted.', true);
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Delete';
+    }
   }
 
   function paginationItems(totalPages, activePage) {
@@ -509,6 +743,7 @@
     productResults = [];
     byId('inspect-sku-options').replaceChildren();
     clearGuideline();
+    generatedCodeSku = '';
     selectedFiles = [];
     renderSelectedMedia();
     document.querySelectorAll('#inspect-create-form .form-error').forEach(element => element.classList.remove('form-error'));
@@ -530,7 +765,7 @@
     employeeSelect.classList.toggle('form-error', !employeeOption?.value);
     byId('inspect-media').closest('.media-picker').classList.toggle('form-error', !selectedFiles.length);
     if (!businessSelect.value || !product || !code || !employeeOption?.value || !selectedFiles.length) {
-      showToast('Select a Business, SKU, and Warehouse Member, enter a code, and upload at least one media file.', true);
+      showToast('Select a Business, SKU, and Warehouse Member, and upload at least one media file.', true);
       return;
     }
     const button = byId('inspect-done-btn');
@@ -594,7 +829,7 @@
       WarehousePage.updateBadgeCounts();
     } catch (error) {
       console.error(error);
-      byId('inspected-list').innerHTML = '<tr><td colspan="5" class="empty-cell">Inspected records could not be loaded. Refresh and try again.</td></tr>';
+      byId('inspected-list').innerHTML = '<tr><td colspan="6" class="empty-cell">Inspected records could not be loaded. Refresh and try again.</td></tr>';
       showToast('Inspected records could not be loaded. Refresh and try again.', true);
     }
   }
@@ -608,13 +843,16 @@
     skuInput.disabled = false;
     skuInput.placeholder = 'Search and select an SKU';
     clearGuideline();
+    generatedCodeSku = '';
+    byId('inspect-code').value = '';
     searchProducts().catch(error => { console.error(error); showToast('SKUs could not be loaded.', true); });
   });
-  byId('inspect-code').addEventListener('input', event => { event.target.value = event.target.value.toUpperCase(); event.target.classList.remove('form-error'); });
   byId('inspect-sku').addEventListener('input', event => {
     event.target.value = event.target.value.toUpperCase();
     event.target.classList.remove('form-error');
     clearGuideline();
+    generatedCodeSku = '';
+    byId('inspect-code').value = '';
     clearTimeout(skuSearchTimer);
     skuSearchTimer = setTimeout(() => searchProducts(event.target.value.trim()).catch(error => console.error(error)), 250);
   });
@@ -623,6 +861,10 @@
   byId('deployed-next-month').addEventListener('click', () => changeDeployedMonth(1));
   byId('inspect-employee').addEventListener('change', event => event.target.classList.remove('form-error'));
   byId('inspect-create-form').addEventListener('submit', submitInspect);
+  byId('inspect-edit-form').addEventListener('submit', submitEdit);
+  byId('inspect-edit-media').addEventListener('change', handleEditMediaSelection);
+  byId('inspect-edit-employee').addEventListener('change', event => event.target.classList.remove('form-error'));
+  byId('inspect-delete-confirm').addEventListener('click', confirmDelete);
   byId('inspected-prev-page').addEventListener('click', () => changePage(currentPage - 1));
   byId('inspected-next-page').addEventListener('click', () => changePage(currentPage + 1));
   byId('inspected-page-numbers').addEventListener('click', event => {

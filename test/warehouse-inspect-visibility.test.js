@@ -38,6 +38,10 @@ test('Inspected uses clean In Stock and Deployed subtabs with a route-gated mont
   assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected-page');
   assert.match(script, /normalizedPath === '\/dashboard\/warehouse\/inspected'[\s\S]*?window\.location\.replace\(`\/dashboard\/warehouse\/inspected\/in-stock/);
   assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/deployed')?.destination, '/dashboard/warehouse/inspected-page');
+  assert.match(read('dashboard/warehouse/inspected/in-stock/index.html'), /searchParams\.set\('view', 'in-stock'\)/);
+  assert.match(read('dashboard/warehouse/inspected/deployed/index.html'), /searchParams\.set\('view', 'deployed'\)/);
+  assert.match(script, /requestedView === 'deployed'/);
+  assert.match(script, /window\.history\.replaceState\(null, '', `\/dashboard\/warehouse\/inspected\/\$\{requestedView\}/);
 });
 
 test('New Inspect exposes a company-scoped guideline only for the exact selected SKU', () => {
@@ -51,12 +55,42 @@ test('New Inspect exposes a company-scoped guideline only for the exact selected
   assert.match(styles, /\.inspection-guide-action \{[^}]*justify-content: center/);
 });
 
+test('New Inspect generates its read-only code after an exact SKU selection', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const script = read('dashboard/warehouse/inspected.js');
+  const codePosition = html.indexOf('for="inspect-code"');
+  const mediaPosition = html.indexOf('for="inspect-media"');
+  assert.ok(codePosition > -1 && codePosition < mediaPosition);
+  assert.match(html, /id="inspect-code"[^>]*placeholder="Select an SKU to generate the code"[^>]*readonly/);
+  assert.match(html, /<span class="form-label">Code<\/span>\s*<div class="edit-code-value" id="inspect-edit-code"><\/div>/);
+  assert.match(script, /String\(sku\)\.toUpperCase\(\)\.replace\(\/\[\^A-Z0-9\]\/g, ''\)/);
+  assert.match(script, /getMonth\(\) \+ 1[\s\S]*?getDate\(\)[\s\S]*?getFullYear\(\)[\s\S]*?randomCodeSuffix\(\)/);
+  assert.match(script, /const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'/);
+  assert.match(script, /productResults\.find\([\s\S]*?generatedCodeSku !== sku[\s\S]*?generateInspectionCode\(product\.sku\)/);
+});
+
 test('Inspected modals restore focus before becoming hidden and inert', () => {
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
-  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 3);
+  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 5);
   assert.match(script, /returnFocus\.focus\(\{ preventScroll: true \}\)[\s\S]*?modal\.inert = true;[\s\S]*?setAttribute\('aria-hidden', 'true'\)/);
   assert.match(script, /modal\.inert = false;[\s\S]*?setAttribute\('aria-hidden', 'false'\)[\s\S]*?\.focus\(\{ preventScroll: true \}\)/);
+});
+
+test('In Stock provides tenant-scoped edit and protected delete actions', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const script = read('dashboard/warehouse/inspected.js');
+  const migration = read('supabase/migrations/20260905090000_warehouse_inspections_manage.sql');
+  assert.match(html, /<th>Action<\/th>/);
+  assert.match(html, /id="inspect-edit-modal"[\s\S]*?id="inspect-delete-modal"/);
+  assert.match(html, /id="inspect-edit-existing-media"[\s\S]*?id="inspect-edit-media"[\s\S]*?id="inspect-edit-new-media"/);
+  assert.match(html, /Are you sure you want to delete this inspected product\?/);
+  assert.match(script, /\.update\([\s\S]*?\.eq\('id', selectedRecord\.id\)[\s\S]*?\.eq\('company_id', companyId\)/);
+  assert.match(script, /media_urls: mediaUrls/);
+  assert.match(script, /await removeUploads\(uploaded\)/);
+  assert.match(script, /\.delete\(\)[\s\S]*?\.eq\('id', record\.id\)[\s\S]*?\.eq\('company_id', companyId\)/);
+  assert.doesNotMatch(script, /\b(?:alert|confirm|prompt)\s*\(/);
+  assert.match(migration, /FOR UPDATE TO authenticated[\s\S]*?FOR DELETE TO authenticated[\s\S]*?NOT EXISTS/);
 });
 
 test('Pack sends reserved booking items directly to a code-gated unit queue', () => {
