@@ -1,5 +1,27 @@
 # BrightKey Multi-Tenant ERP Security Architecture & Guidelines (`AGENTS.md`)
 
+## Team Git Workflow
+
+Assume another contributor may be changing the same files on another computer.
+
+- Before work, preserve all unfinished local changes, fetch `origin`, update
+  local `main` with fast-forward only, and create a short-lived task branch from
+  the latest `main`. Never discard or mix unrelated work to make synchronization
+  succeed.
+- Make and test changes on the task branch. Stage explicit task files; never use
+  broad staging when generated product pages, tenant logos, currency output, or
+  other incidental files are present.
+- After localhost approval, fetch `origin/main` again and check for both textual
+  Git conflicts and logical conflicts where two changes interact without conflict
+  markers. Re-run relevant checks after integrating the latest `main`.
+- Push only the task branch and open a pull request. Review its Vercel Preview.
+  Do not merge or push directly to `main` until the user approves the Preview.
+- After Preview approval, confirm the branch is still current, rerun required
+  checks, merge through the pull request, and verify the production deployment.
+- Database changes use version-controlled Supabase migrations. Production
+  migrations run from one controlled CI process after merge, never concurrently
+  from developer computers or through ad hoc production Dashboard edits.
+
 > [!CRITICAL]
 > **AGENT PROTOCOL**: Do NOT rely on your generic training data first to debug or write solutions. The solution or constraints for recurring problems are already documented in this file, `CLAUDE.md`, and `DESIGN.md`. Before proposing any code modifications, always search these files first to see how the problem was solved before.
 >
