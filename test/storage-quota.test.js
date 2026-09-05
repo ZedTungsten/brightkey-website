@@ -15,6 +15,16 @@ test('database migration enforces tenant storage and the 0.5 GB warning buffer',
   assert.match(sql, /remaining_bytes <= 536870912 THEN 'almost_full'/);
   assert.match(sql, /RAISE EXCEPTION 'Account storage is full/);
   assert.match(sql, /pricing_tiers[\s\S]*storage_limit_gb/);
+  assert.match(sql, /check_company_storage_quota[\s\S]*SECURITY INVOKER/);
+});
+
+test('deployable migration restores the authenticated storage quota RPC', () => {
+  const sql = read('supabase/migrations/20260904060000_restore_company_storage_quota_rpc.sql');
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.check_company_storage_quota/);
+  assert.match(sql, /tenants t[\s\S]*owner_email[\s\S]*tenant_members tm/);
+  assert.match(sql, /FROM public\.get_company_storage_usage\(p_company_id\)/);
+  assert.match(sql, /REVOKE ALL[\s\S]*FROM PUBLIC, anon/);
+  assert.match(sql, /GRANT EXECUTE[\s\S]*TO authenticated, service_role/);
 });
 
 test('all supported upload paths retain authentication, tenant scoping, and quota checks', () => {

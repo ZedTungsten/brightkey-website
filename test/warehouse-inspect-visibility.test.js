@@ -33,7 +33,10 @@ test('Inspected uses clean In Stock and Deployed subtabs with a route-gated mont
   assert.match(read('dashboard/warehouse/inspected.css'), /\.month-picker button \{[^}]*width: 42px;[^}]*height: 42px;[^}]*border: 0;/);
   assert.match(script, /if \(activeView === 'deployed'\) \{[\s\S]*?await WarehousePage\.updateBadgeCounts\(\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?Promise\.all\(\[loadBusinesses\(\), loadWarehouseMembers\(\), loadRecords\(0\)\]\)/);
   assert.doesNotMatch(script, /refreshTabBadges|badge\.style\.display = 'inline-block'/);
-  assert.match(config, /"source": "\/dashboard\/warehouse\/inspected", "destination": "\/dashboard\/warehouse\/inspected\/in-stock"/);
+  const routes = JSON.parse(config);
+  assert.equal(routes.redirects.some(route => route.source === '/dashboard/warehouse/inspected'), false);
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected.html');
+  assert.match(script, /normalizedPath === '\/dashboard\/warehouse\/inspected'[\s\S]*?window\.location\.replace\(`\/dashboard\/warehouse\/inspected\/in-stock/);
   assert.match(config, /"source": "\/dashboard\/warehouse\/inspected\/deployed", "destination": "\/dashboard\/warehouse\/inspected\.html"/);
 });
 

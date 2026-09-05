@@ -559,9 +559,17 @@ BEGIN
      AND NOT EXISTS (
        SELECT 1
        FROM public.companies c
-       JOIN public.tenant_members tm ON tm.tenant_id = c.tenant_id
+       JOIN public.tenants t ON t.id = c.tenant_id
        WHERE c.id = p_company_id
-         AND tm.user_id = auth.uid()
+         AND (
+           lower(COALESCE(t.owner_email, '')) = lower(COALESCE(auth.jwt() ->> 'email', ''))
+           OR EXISTS (
+             SELECT 1
+             FROM public.tenant_members tm
+             WHERE tm.tenant_id = c.tenant_id
+               AND tm.user_id = auth.uid()
+           )
+         )
      ) THEN
     RAISE EXCEPTION 'You do not have access to this company storage.'
       USING ERRCODE = '42501';
@@ -601,6 +609,35 @@ BEGIN
       ELSE 0 END;
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION public.check_company_storage_quota(
+  p_company_id UUID,
+  p_incoming_bytes BIGINT DEFAULT 0
+)
+RETURNS TABLE (
+  allowed BOOLEAN,
+  used_bytes BIGINT,
+  incoming_bytes BIGINT,
+  projected_bytes BIGINT,
+  limit_bytes BIGINT,
+  remaining_bytes BIGINT
+)
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT
+    (usage.used_bytes + GREATEST(p_incoming_bytes, 0)) <= usage.limit_bytes,
+    usage.used_bytes,
+    GREATEST(p_incoming_bytes, 0),
+    usage.used_bytes + GREATEST(p_incoming_bytes, 0),
+    usage.limit_bytes,
+    GREATEST(usage.limit_bytes - (usage.used_bytes + GREATEST(p_incoming_bytes, 0)), 0)
+  FROM public.get_company_storage_usage(p_company_id) AS usage;
+$$;
+
+REVOKE ALL ON FUNCTION public.check_company_storage_quota(UUID, BIGINT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.check_company_storage_quota(UUID, BIGINT) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.get_company_storage_notice(p_company_id UUID)
 RETURNS TABLE (
