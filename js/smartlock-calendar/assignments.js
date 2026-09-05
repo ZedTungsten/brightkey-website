@@ -4,6 +4,21 @@ function normalizeWorkflowSku(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function completeInstallerWorkflowRoles(roles, skus) {
+  const completed = [...new Set((Array.isArray(roles) ? roles : [])
+    .map(role => String(role || '').trim().toLowerCase())
+    .filter(Boolean))];
+  if (!completed.some(role => role === 'lead' || role === 'service')) return completed;
+
+  const activeSkus = (Array.isArray(skus) ? skus : [])
+    .map(normalizeWorkflowSku)
+    .filter(sku => sku && sku !== 'ADD-ON LABOR');
+  const serviceSkus = new Set((installerServiceCatalog || []).map(product => normalizeWorkflowSku(product?.sku)));
+  if (activeSkus.some(sku => !serviceSkus.has(sku)) && !completed.includes('lead')) completed.unshift('lead');
+  if (activeSkus.some(sku => serviceSkus.has(sku)) && !completed.includes('service')) completed.push('service');
+  return completed;
+}
+
 function getSpecialServiceWorkflowSku(booking) {
   const orderNo = normalizeWorkflowSku(booking?.order_no);
   const bookingSkus = getBookingProducts(booking).map(product => normalizeWorkflowSku(product?.sku));
