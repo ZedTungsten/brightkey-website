@@ -174,7 +174,11 @@
 
       const hasServiceProduct = doorProducts.some(p => {
         const prod = dbProductsBySku.get(String(p.sku || '').toUpperCase());
-        return prod && prod.category === 'Service';
+        return String(prod?.category || '').trim().toLowerCase() === 'service';
+      });
+      const hasHardwareProduct = doorProducts.some(p => {
+        const prod = dbProductsBySku.get(String(p.sku || '').toUpperCase());
+        return String(prod?.category || '').trim().toLowerCase() !== 'service';
       });
 
       const container = document.getElementById(`door-inst-container-${doorIndex}`);
@@ -182,19 +186,20 @@
 
       const roleLabel = (text) => `<span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.04em;">${text}</span>`;
       const roleRowStyle = 'display:grid;grid-template-columns:48px minmax(0,1fr) 28px;gap:0.35rem;align-items:center;';
-      const serviceInstallerId = serviceInst?.id || (hasServiceProduct ? inst1Id : '');
+      const primaryInstallerId = leadInst?.id || serviceInst?.id || currentInstallers[0]?.id || '';
+      const serviceInstallerId = serviceInst?.id || (hasServiceProduct ? primaryInstallerId : '');
 
-      const leadHtml = hasServiceProduct ? '' : `
+      const leadHtml = hasHardwareProduct ? `
           <div style="${roleRowStyle}">
             ${roleLabel('Lead')}
             <select class="form-input" style="height:auto; padding:0.35rem; font-size:0.8rem; flex:1;" id="edit-inst-${doorIndex}-1" data-role="lead">
-              ${buildDoorInstallerOptions(inst1Id)}
+              ${buildDoorInstallerOptions(primaryInstallerId)}
             </select>
             <button type="button" class="btn-minimal btn-danger" onclick="clearDoorInstallerEdit(${doorIndex}, 'lead')" title="Remove lead assignment">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
-      `;
+      ` : '';
 
       const serviceHtml = hasServiceProduct ? `
           <div style="${roleRowStyle}">

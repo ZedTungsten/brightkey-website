@@ -71,9 +71,7 @@ test('every rendered dashboard page keeps the shared sidebar loader', () => {
     'dashboard/settings.html',
     'dashboard/ship.html',
     'dashboard/warehouse.html',
-    'dashboard/warehouse/inspect.html',
-    'dashboard/warehouse/inspected/deployed/index.html',
-    'dashboard/warehouse/inspected/in-stock/index.html'
+    'dashboard/warehouse/inspect.html'
   ]);
   const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     const fullPath = path.join(directory, entry.name);

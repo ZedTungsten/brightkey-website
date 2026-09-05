@@ -24,14 +24,7 @@
   let guidelineRequestId = 0;
   let generatedCodeSku = '';
   const modalReturnFocus = new WeakMap();
-  const initialUrl = new URL(window.location.href);
-  const requestedView = initialUrl.searchParams.get('view');
-  if (['in-stock', 'deployed'].includes(requestedView) && /\/dashboard\/warehouse\/inspected-page(?:\.html)?\/?$/.test(initialUrl.pathname)) {
-    initialUrl.searchParams.delete('view');
-    const remainingQuery = initialUrl.searchParams.toString();
-    window.history.replaceState(null, '', `/dashboard/warehouse/inspected/${requestedView}${remainingQuery ? `?${remainingQuery}` : ''}${initialUrl.hash}`);
-  }
-  const activeView = requestedView === 'deployed' || window.location.pathname.replace(/\/+$/, '').endsWith('/deployed')
+  const activeView = window.location.pathname.replace(/\/+$/, '').endsWith('/deployed')
     ? 'deployed'
     : 'in-stock';
   let deployedMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -57,6 +50,110 @@
   function changeDeployedMonth(offset) {
     deployedMonth = new Date(deployedMonth.getFullYear(), deployedMonth.getMonth() + offset, 1);
     renderDeployedMonth();
+    if (activeView === 'deployed' && companyId) {
+      loadDeployedRecords().catch(error => {
+        console.error(error);
+        renderDeployedError();
+      });
+    }
+  }
+
+  function deployedMonthRange() {
+    const start = new Date(deployedMonth.getFullYear(), deployedMonth.getMonth(), 1);
+    const end = new Date(deployedMonth.getFullYear(), deployedMonth.getMonth() + 1, 1);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
+  function formatRecordDate(value) {
+    return value ? new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  }
+
+  function renderDeployedError() {
+    const body = byId('deployed-list');
+    body.replaceChildren();
+    const row = body.insertRow();
+    const cell = row.insertCell();
+    cell.colSpan = 7;
+    cell.className = 'empty-cell';
+    cell.textContent = 'Deployed records could not be loaded. Refresh and try again.';
+    showToast('Deployed records could not be loaded. Refresh and try again.', true);
+  }
+
+  function renderDeployedRecords(deployedRecords) {
+    const body = byId('deployed-list');
+    body.replaceChildren();
+    if (!deployedRecords.length) {
+      const row = body.insertRow();
+      const cell = row.insertCell();
+      cell.colSpan = 7;
+      cell.className = 'empty-cell';
+      cell.textContent = 'No deployed records for this month.';
+      return;
+    }
+    deployedRecords.forEach(record => {
+      const row = body.insertRow();
+      [record.code, record.sku, record.reference_id].forEach(value => {
+        const cell = row.insertCell();
+        cell.textContent = value || '—';
+      });
+      const mediaCell = row.insertCell();
+      const mediaButton = document.createElement('button');
+      mediaButton.type = 'button';
+      mediaButton.className = 'media-link';
+      mediaButton.textContent = 'See Media Uploaded';
+      mediaButton.addEventListener('click', () => openGallery(record));
+      mediaCell.appendChild(mediaButton);
+      [record.inspected_by_name, formatRecordDate(record.inspected_at), formatRecordDate(record.timestamp_dispatched)].forEach(value => {
+        const cell = row.insertCell();
+        cell.textContent = value || '—';
+      });
+    });
+  }
+
+  async function loadDeployedRecords() {
+    const body = byId('deployed-list');
+    body.innerHTML = '<tr><td colspan="7"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading deployed records...</span></div></td></tr>';
+    const range = deployedMonthRange();
+    const { data: transactions, error: transactionError } = await sb.from('inventory_transactions')
+      .select('id, reference_id, sku, timestamp_dispatched')
+      .eq('company_id', companyId)
+      .eq('type', 'customer_order')
+      .not('timestamp_dispatched', 'is', null)
+      .gte('timestamp_dispatched', range.start)
+      .lt('timestamp_dispatched', range.end)
+      .order('timestamp_dispatched', { ascending: false })
+      .limit(500);
+    if (transactionError) throw transactionError;
+    const transactionIds = (transactions || []).map(transaction => transaction.id);
+    if (!transactionIds.length) {
+      renderDeployedRecords([]);
+      return;
+    }
+    const { data: allocations, error: allocationError } = await sb.from('warehouse_inspection_allocations')
+      .select('inspection_id, transaction_id, reference_id, sku')
+      .eq('company_id', companyId)
+      .in('transaction_id', transactionIds)
+      .limit(500);
+    if (allocationError) throw allocationError;
+    const inspectionIds = (allocations || []).map(allocation => allocation.inspection_id);
+    if (!inspectionIds.length) {
+      renderDeployedRecords([]);
+      return;
+    }
+    const { data: inspections, error: inspectionError } = await sb.from('warehouse_inspections')
+      .select('id, code, sku, media_urls, inspected_by_name, inspected_at')
+      .eq('company_id', companyId)
+      .in('id', inspectionIds)
+      .limit(500);
+    if (inspectionError) throw inspectionError;
+    const transactionById = new Map((transactions || []).map(transaction => [transaction.id, transaction]));
+    const allocationByInspection = new Map((allocations || []).map(allocation => [allocation.inspection_id, allocation]));
+    const deployedRecords = (inspections || []).map(inspection => {
+      const allocation = allocationByInspection.get(inspection.id);
+      const transaction = transactionById.get(allocation?.transaction_id);
+      return { ...inspection, reference_id: allocation?.reference_id, timestamp_dispatched: transaction?.timestamp_dispatched };
+    }).sort((a, b) => String(b.timestamp_dispatched).localeCompare(String(a.timestamp_dispatched)));
+    renderDeployedRecords(deployedRecords);
   }
 
   function showToast(message, isError = false) {
@@ -699,9 +796,9 @@
   async function loadRecords(page = 0) {
     const start = page * PAGE_SIZE;
     const { data, error, count } = await sb.from('warehouse_inspections')
-      .select('id, code, sku, media_urls, inspected_by, inspected_by_name, inspected_at, warehouse_inspection_allocations!left(inspection_id)', { count: 'exact' })
+      .select('id, code, sku, media_urls, inspected_by, inspected_by_name, inspected_at, warehouse_inspection_allocations()', { count: 'exact' })
       .eq('company_id', companyId)
-      .is('warehouse_inspection_allocations.inspection_id', null)
+      .is('warehouse_inspection_allocations', null)
       .order('inspected_at', { ascending: false })
       .range(start, start + PAGE_SIZE - 1);
     if (error) throw error;
@@ -822,7 +919,7 @@
       if (!companyId) throw new Error('Company context is unavailable.');
       WarehousePage.companyId = companyId;
       if (activeView === 'deployed') {
-        await WarehousePage.updateBadgeCounts();
+        await Promise.all([loadDeployedRecords(), WarehousePage.updateBadgeCounts()]);
         return;
       }
       await Promise.all([loadBusinesses(), loadWarehouseMembers(), loadRecords(0)]);

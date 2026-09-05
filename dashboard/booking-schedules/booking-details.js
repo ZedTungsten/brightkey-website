@@ -598,6 +598,33 @@
           `;
 
           const allProductsCancelled = doorProducts.length > 0 && doorProducts.every(p => p.cancelled);
+          const activeDoorProducts = doorProducts.filter(product => !product.cancelled);
+          const hasServiceProduct = activeDoorProducts.some(product => {
+            const catalogProduct = dbProductsBySku.get(String(product?.sku || '').trim().toUpperCase());
+            return String(catalogProduct?.category || '').trim().toLowerCase() === 'service';
+          });
+          const hasHardwareProduct = activeDoorProducts.some(product => {
+            const catalogProduct = dbProductsBySku.get(String(product?.sku || '').trim().toUpperCase());
+            return String(catalogProduct?.category || '').trim().toLowerCase() !== 'service';
+          });
+          const installerRoleLabel = (role) => {
+            const roleKey = String(role || '').trim().toLowerCase();
+            if (roleKey.includes('assist')) return 'Assistant Installer';
+            if (roleKey.includes('service')) return 'Service Installer';
+            return hasHardwareProduct ? 'Lead Installer' : 'Service Installer';
+          };
+          const completePrimaryInstallerRoles = (installers) => {
+            const completed = installers.map((installer, index) => ({
+              ...installer,
+              role: installer?.role || (index === 0 ? (hasHardwareProduct ? 'lead' : 'service') : 'assist')
+            }));
+            const primary = completed.find(installer => !String(installer?.role || '').toLowerCase().includes('assist'));
+            if (!primary) return completed;
+            const hasRole = role => completed.some(installer => String(installer?.role || '').toLowerCase() === role);
+            if (hasHardwareProduct && !hasRole('lead')) completed.unshift({ ...primary, role: 'lead' });
+            if (hasServiceProduct && !hasRole('service')) completed.push({ ...primary, role: 'service' });
+            return completed;
+          };
 
           // Installers assigned to this door — show with role labels if available
           let installersHtml = 'None Assigned';
@@ -605,10 +632,8 @@
             installersHtml = 'N/A';
           } else if (door && Array.isArray(door.installers)) {
             if (door.installers.length > 0) {
-               installersHtml = door.installers.map(inst => {
-                 const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
-                 const roleKey = String(inst.role || '').toLowerCase();
-                 const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
+               installersHtml = completePrimaryInstallerRoles(door.installers).map(inst => {
+                 const roleLabel = installerRoleLabel(inst.role);
                  return `<div class="booking-installer-assignment">${installerAvatarMarkup(inst)}<span class="booking-installer-copy"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></span></div>`;
                }).join('');
             } else {
@@ -622,10 +647,8 @@
               list = selectedBooking.installers;
             }
             if (list.length > 0) {
-              installersHtml = list.map(inst => {
-                const roleText = inst.role ? inst.role.charAt(0).toUpperCase() + inst.role.slice(1) : '';
-                const roleKey = String(inst.role || '').toLowerCase();
-                const roleLabel = roleKey.includes('assist') ? 'Assistant Installer' : roleKey.includes('lead') ? 'Lead Installer' : roleText ? `${roleText} Installer` : 'Installer';
+              installersHtml = completePrimaryInstallerRoles(list).map(inst => {
+                const roleLabel = installerRoleLabel(inst.role);
                 return `<div class="booking-installer-assignment">${installerAvatarMarkup(inst)}<span class="booking-installer-copy"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></span></div>`;
               }).join('');
             }

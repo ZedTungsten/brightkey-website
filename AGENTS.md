@@ -36,6 +36,17 @@ Assume another contributor may be changing the same files on another computer.
 ## 1. Secure & Isolated Multi-Tenancy (Row-Level Security)
 We employ Postgres Row-Level Security (RLS) on all tables to enforce strict data isolation between tenants. Users can never view, insert, update, or delete data belonging to another tenant.
 
+### Apply Required Additive Migrations During Local Feature Work
+
+When a requested localhost feature depends on a new additive Supabase schema
+change, apply the reviewed migration to the connected BrightKey Supabase project
+as part of the implementation so the workflow can be tested end to end. Do not
+leave the local UI knowingly connected to a missing table, column, policy, or
+function. This standing authorization covers additive, non-destructive schema
+changes required by the requested feature. Continue to stop for explicit user
+approval before destructive migrations, data rewrites, broad permission changes,
+or changes outside the requested feature's scope.
+
 ### Strict Data Isolation Rules
 - **RLS is Enabled by Default**: Every table containing sensitive configurations, orders, bookings, invoices, or third-party keys must have RLS explicitly enabled:
   ```sql
