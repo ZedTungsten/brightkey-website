@@ -35,9 +35,9 @@ test('Inspected uses clean In Stock and Deployed subtabs with a route-gated mont
   assert.doesNotMatch(script, /refreshTabBadges|badge\.style\.display = 'inline-block'/);
   const routes = JSON.parse(config);
   assert.equal(routes.redirects.some(route => route.source === '/dashboard/warehouse/inspected'), false);
-  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected-page.html');
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected-page');
   assert.match(script, /normalizedPath === '\/dashboard\/warehouse\/inspected'[\s\S]*?window\.location\.replace\(`\/dashboard\/warehouse\/inspected\/in-stock/);
-  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/deployed')?.destination, '/dashboard/warehouse/inspected-page.html');
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/deployed')?.destination, '/dashboard/warehouse/inspected-page');
 });
 
 test('New Inspect exposes a company-scoped guideline only for the exact selected SKU', () => {
