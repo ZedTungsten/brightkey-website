@@ -93,18 +93,19 @@ function drawJobTracker() {
     const excludeFromRoleCounts = isDayOff || isOcular || isBackjob;
     const assignedDoors = getInstallerAssignedDoorsForBooking(b, myId);
     assignedDoors.forEach(d => {
+      const displayRoles = completeInstallerWorkflowRoles(d.roles, d.skus);
       if (!isDayOff) {
         totalCount++;
       }
 
-      const matchedServiceSkus = d.roles.includes('service')
+      const matchedServiceSkus = displayRoles.includes('service')
         ? [...new Set((d.skus || [])
           .map(sku => String(sku).trim().toUpperCase())
           .filter(sku => serviceSkuSet.has(sku)))]
         : [];
-      if (d.roles.includes('service') && isOcular && serviceSkuSet.has('OCULAR') && !matchedServiceSkus.includes('OCULAR')) matchedServiceSkus.push('OCULAR');
-      if (d.roles.includes('service') && isBackjob && serviceSkuSet.has('BACKJOB') && !matchedServiceSkus.includes('BACKJOB')) matchedServiceSkus.push('BACKJOB');
-      if (d.roles.includes('service')) {
+      if (displayRoles.includes('service') && isOcular && serviceSkuSet.has('OCULAR') && !matchedServiceSkus.includes('OCULAR')) matchedServiceSkus.push('OCULAR');
+      if (displayRoles.includes('service') && isBackjob && serviceSkuSet.has('BACKJOB') && !matchedServiceSkus.includes('BACKJOB')) matchedServiceSkus.push('BACKJOB');
+      if (displayRoles.includes('service')) {
         serviceCount++;
       }
       if (matchedServiceSkus.length) {
@@ -113,9 +114,9 @@ function drawJobTracker() {
         });
       }
       if (!excludeFromRoleCounts) {
-        if (d.roles.includes('lead')) {
+        if (displayRoles.includes('lead')) {
           leadCount++;
-        } else if (d.roles.includes('assist')) {
+        } else if (displayRoles.includes('assist')) {
           assistCount++;
         }
       }
@@ -128,13 +129,13 @@ function drawJobTracker() {
         : `<span style="font-size:0.68rem; font-weight:700; background:#FEF3C7; color:#92400E; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Scheduled</span>`;
       
       let roleBadgesHtml = '';
-      if (d.roles.includes('lead')) {
+      if (displayRoles.includes('lead')) {
         roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#CFFAFE; color:#0891B2; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Lead</span>`;
       }
-      if (d.roles.includes('assist')) {
+      if (displayRoles.includes('assist')) {
         roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#F3F4F6; color:#374151; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Assist</span>`;
       }
-      if (d.roles.includes('service')) {
+      if (displayRoles.includes('service')) {
         roleBadgesHtml += `<span style="font-size:0.68rem; font-weight:700; background:#F3E8FF; color:#7E22CE; padding:0.15rem 0.4rem; border-radius:4px; text-transform:uppercase;">Service</span>`;
       }
 

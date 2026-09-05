@@ -1,6 +1,22 @@
 'use strict';
 
 // --- Calendar Rendering ---
+function completeCalendarInstallerRoles(installers, skus) {
+  const completed = (Array.isArray(installers) ? installers : []).map((installer, index) => ({
+    ...installer,
+    role: String(installer?.role || (index === 0 ? 'lead' : 'assist')).trim().toLowerCase()
+  }));
+  const primary = completed.find(installer => installer.role !== 'assist');
+
+  if (!primary) return completed;
+  const completeRoles = completeInstallerWorkflowRoles(completed.map(installer => installer.role), skus);
+  completeRoles.forEach(role => {
+    if (!completed.some(installer => installer.role === role)) completed.push({ ...primary, role });
+  });
+  completed.sort((a, b) => ['lead', 'assist', 'service'].indexOf(a.role) - ['lead', 'assist', 'service'].indexOf(b.role));
+  return completed;
+}
+
 async function changeMonth(direction) {
   currentMonth += direction;
   if (currentMonth < 0) {
@@ -226,8 +242,9 @@ function drawAgenda() {
           doorInstallers = b.installer_name.split(' | ').map(name => ({ name }));
         }
       }
-      const installersText = doorInstallers.length > 0 
-        ? doorInstallers.map(inst => {
+      const displayInstallers = completeCalendarInstallerRoles(doorInstallers, sku.split(','));
+      const installersText = displayInstallers.length > 0
+        ? displayInstallers.map(inst => {
             const name = formatInstallerName(inst.name || inst);
             return inst.role ? `[${inst.role.charAt(0).toUpperCase() + inst.role.slice(1)}] ${name}` : name;
           }).join(', ')
