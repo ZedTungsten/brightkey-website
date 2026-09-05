@@ -79,6 +79,17 @@ function getBookingProducts(booking) {
   return String(booking?.product_skus || '').split(' | ').filter(Boolean).map(sku => ({ sku }));
 }
 
+function getActiveDoorProductSkus(booking, door, doorIndex) {
+  const attachedSkus = Array.isArray(door?.products) ? door.products : [];
+  const products = getBookingProducts(booking);
+  return attachedSkus.filter(attachedSku => {
+    let matches = products.filter(product => normalizeWorkflowSku(product?.sku) === normalizeWorkflowSku(attachedSku));
+    const indexedMatches = matches.filter(product => Number(product?.doorIndex) === doorIndex);
+    if (indexedMatches.length > 0) matches = indexedMatches;
+    return matches.length === 0 || matches.some(product => product?.cancelled !== true);
+  });
+}
+
 function isDoorCancelledForCompletion(booking, door, doorIndex, doors = []) {
   if (door?.cancelled === true || String(door?.status || '').toLowerCase() === 'cancelled') return true;
   const products = getBookingProducts(booking);

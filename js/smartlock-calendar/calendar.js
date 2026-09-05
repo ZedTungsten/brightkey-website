@@ -191,6 +191,7 @@ function drawAgenda() {
     const names = (b.product_names || '').split(' | ');
 
     const hardwareProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
+    const activeHardwareProducts = hardwareProducts.filter(product => product?.cancelled !== true);
     const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
     const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
     
@@ -210,14 +211,11 @@ function drawAgenda() {
       let isCancelled = false;
 
       if (anyDoorHasAttachedProducts) {
-        const attachedSkusList = door?.products || [];
+        const attachedSkusList = getActiveDoorProductSkus(b, door, i);
         sku = attachedSkusList.join(', ') || 'N/A';
-        isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
-          const pMatch = productsArr.find(p => p.sku === itemSku);
-          return pMatch?.cancelled || false;
-        });
+        isCancelled = Array.isArray(door?.products) && door.products.length > 0 && attachedSkusList.length === 0;
       } else if (doorsArr.length === 1) {
-        const allSkusList = hardwareProducts.length > 0 ? hardwareProducts.map(p => p.sku) : hardwareSkus;
+        const allSkusList = hardwareProducts.length > 0 ? activeHardwareProducts.map(p => p.sku) : hardwareSkus;
         sku = allSkusList.join(', ') || 'N/A';
         isCancelled = hardwareProducts.length > 0 && hardwareProducts.every(p => p.cancelled || false);
       } else {

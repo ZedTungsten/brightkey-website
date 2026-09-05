@@ -36,3 +36,19 @@ test('installer calendar completes Lead and Service display roles from mixed pro
   assert.match(jobTrackerSource, /if \(displayRoles\.includes\('lead'\)\)/);
   assert.match(jobTrackerSource, /if \(displayRoles\.includes\('service'\)\)/);
 });
+
+test('installer calendar omits cancelled products from schedule and door details', () => {
+  const context = { result: null };
+  vm.runInNewContext(`${assignmentsSource}\nresult = getActiveDoorProductSkus({
+    products: [
+      { sku: 'G14 TT' },
+      { sku: 'BASEPLATE-S' },
+      { sku: 'INSTALL-M', cancelled: true }
+    ]
+  }, { products: ['G14 TT', 'INSTALL-M', 'BASEPLATE-S'] }, 0);`, context);
+
+  assert.deepEqual(Array.from(context.result), ['G14 TT', 'BASEPLATE-S']);
+  assert.match(calendarSource, /getActiveDoorProductSkus\(b, door, i\)/);
+  const detailsSource = fs.readFileSync(new URL('../js/smartlock-calendar/booking-details.js', import.meta.url), 'utf8');
+  assert.match(detailsSource, /getActiveDoorProductSkus\(b, door, i\)/);
+});

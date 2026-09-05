@@ -153,6 +153,7 @@ function openDetailsModal(bookingId) {
   const names = (b.product_names || '').split(' | ');
 
   const hardwareProducts = productsArr.filter(p => p.sku !== 'ADD-ON LABOR');
+  const activeHardwareProducts = hardwareProducts.filter(product => product?.cancelled !== true);
   const hardwareSkus = skus.filter(s => s.trim() !== 'ADD-ON LABOR');
   const hardwareNames = names.filter(n => n.trim() !== 'ADD-ON LABOR');
 
@@ -176,7 +177,7 @@ function openDetailsModal(bookingId) {
       let isCancelled = false;
 
       if (anyDoorHasAttachedProducts) {
-        const attachedSkusList = door?.products || [];
+        const attachedSkusList = getActiveDoorProductSkus(b, door, i);
         sku = attachedSkusList.join(', ') || 'N/A';
         const doorTitles = attachedSkusList.map(itemSku => {
           const pMatch = productsArr.find(p => p.sku === itemSku);
@@ -192,13 +193,10 @@ function openDetailsModal(bookingId) {
           return formatSmartlockProductLine(itemSku, t);
         });
         titleHtml = doorTitles.map(tHtml => `<div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.4rem;">${tHtml}</div>`).join('');
-        isCancelled = attachedSkusList.length > 0 && attachedSkusList.every(itemSku => {
-          const pMatch = productsArr.find(p => p.sku === itemSku);
-          return pMatch?.cancelled || false;
-        });
+        isCancelled = Array.isArray(door?.products) && door.products.length > 0 && attachedSkusList.length === 0;
       } else if (doorsArr.length === 1) {
         // Combine all products to Door 1
-        const allSkusList = hardwareProducts.length > 0 ? hardwareProducts.map(p => p.sku) : hardwareSkus;
+        const allSkusList = hardwareProducts.length > 0 ? activeHardwareProducts.map(p => p.sku) : hardwareSkus;
         sku = allSkusList.join(', ') || 'N/A';
         
         const doorTitles = allSkusList.map(itemSku => {
