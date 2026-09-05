@@ -19,7 +19,7 @@ test('Warehouse Requests is removed and its legacy routes safely redirect to Pac
 });
 
 test('Inspected uses clean In Stock and Deployed subtabs with a route-gated month navigator', () => {
-  const html = read('dashboard/warehouse/inspected.html');
+  const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   const config = read('vercel.json');
   assert.match(html, /href="\/dashboard\/warehouse\/inspected\/in-stock">In Stock/);
@@ -35,13 +35,13 @@ test('Inspected uses clean In Stock and Deployed subtabs with a route-gated mont
   assert.doesNotMatch(script, /refreshTabBadges|badge\.style\.display = 'inline-block'/);
   const routes = JSON.parse(config);
   assert.equal(routes.redirects.some(route => route.source === '/dashboard/warehouse/inspected'), false);
-  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected.html');
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected-page.html');
   assert.match(script, /normalizedPath === '\/dashboard\/warehouse\/inspected'[\s\S]*?window\.location\.replace\(`\/dashboard\/warehouse\/inspected\/in-stock/);
-  assert.match(config, /"source": "\/dashboard\/warehouse\/inspected\/deployed", "destination": "\/dashboard\/warehouse\/inspected\.html"/);
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/deployed')?.destination, '/dashboard/warehouse/inspected-page.html');
 });
 
 test('New Inspect exposes a company-scoped guideline only for the exact selected SKU', () => {
-  const html = read('dashboard/warehouse/inspected.html');
+  const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   const styles = read('dashboard/warehouse/inspected.css');
   assert.match(html, /id="inspection-guide-action" hidden/);
@@ -52,7 +52,7 @@ test('New Inspect exposes a company-scoped guideline only for the exact selected
 });
 
 test('Inspected modals restore focus before becoming hidden and inert', () => {
-  const html = read('dashboard/warehouse/inspected.html');
+  const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 3);
   assert.match(script, /returnFocus\.focus\(\{ preventScroll: true \}\)[\s\S]*?modal\.inert = true;[\s\S]*?setAttribute\('aria-hidden', 'true'\)/);
@@ -82,7 +82,7 @@ test('In Stock omits inspected codes already allocated to Pack', () => {
 });
 
 test('In Stock uses bounded server pagination instead of Load More', () => {
-  const html = read('dashboard/warehouse/inspected.html');
+  const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   assert.doesNotMatch(html, /Load More|load-more-btn/);
   assert.match(html, /id="inspected-prev-page"[\s\S]*?id="inspected-page-numbers"[\s\S]*?id="inspected-next-page"/);
