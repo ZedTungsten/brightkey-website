@@ -1902,10 +1902,29 @@
     }
 
     window.openViewReceiptById = async function(bookingId) {
-      const b = dbBookings.find(x => x.id === bookingId);
-      if (!b) return;
+      const cachedBooking = dbBookings.find(x => x.id === bookingId);
+      if (!cachedBooking || !currentCompanyId) return;
 
       const sb = window.BKAuth.sb;
+      const w = window.open('', '_blank');
+      if (!w) {
+        showToast('Allow pop-ups for BrightKey to open the receipt.', true);
+        return;
+      }
+      w.document.body.textContent = 'Loading latest receipt...';
+
+      const { data: b, error: bookingError } = await sb
+        .from('installation_bookings')
+        .select('*')
+        .eq('company_id', currentCompanyId)
+        .eq('id', bookingId)
+        .single();
+      if (bookingError || !b) {
+        w.close();
+        console.error('Could not load latest receipt:', bookingError);
+        showToast('The latest receipt could not be loaded. Please try again.', true);
+        return;
+      }
 
       const pipe = (str) => str ? str.split('|').map(s => s.trim()).filter(Boolean) : [];
       const esc  = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1984,8 +2003,6 @@
         : new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
 
       const orderNo = esc(b.order_no || '');
-
-      const w = window.open('', '_blank');
 
       if (cfg.template) {
         let html = cfg.template;

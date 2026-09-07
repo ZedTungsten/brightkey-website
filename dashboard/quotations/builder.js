@@ -4,7 +4,7 @@
   const CONFIG_KEY = 'quotation_builder_config';
   const FONT_FAMILIES = { times:'"Times New Roman",Times,serif', montserrat:'"Montserrat",sans-serif', commissioner:'"Commissioner",sans-serif' };
   const { FIELD_IDS, DEFAULTS } = window.BKQuotationDocument;
-  const state = { companyId:null, companyProfile:{}, documentDate:new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Manila', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date()) };
+  const state = { companyId:null, companyProfile:{}, quotationNumber:'', documentDate:new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Manila', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date()) };
   const byId = id => document.getElementById(id);
 
   function toast(message, type = 'success') {
@@ -56,7 +56,7 @@
     previewTitle.style.fontSize = `${byId('quotation-title-font-size')?.value || DEFAULTS['quotation-title-font-size']}px`;
     showValue('preview-title', fieldValue('quotation-title') || DEFAULTS['quotation-title']);
     byId('preview-subheader').textContent = fieldValue('quotation-subheader');
-    showValue('preview-number', fieldValue('quotation-number'));
+    showValue('preview-number', state.quotationNumber);
     showValue('preview-company', fieldValue('prepared-company'));
     showValue('preview-address', fieldValue('prepared-address'));
     showValue('preview-contact', fieldValue('prepared-contact'));
@@ -91,7 +91,7 @@
     if (typeof window.html2pdf !== 'function') { toast('The PDF generator is still loading. Please try again.', 'error'); return; }
     const sheet = byId('quotation-sheet');
     const button = byId('quotation-save-pdf');
-    const quotationNumber = fieldValue('quotation-number').replace(/[^a-z0-9_-]+/gi, '_') || 'Draft';
+    const quotationNumber = state.quotationNumber.replace(/[^a-z0-9_-]+/gi, '_') || 'Draft';
     const originalHtml = button.innerHTML;
     const originalShadow = sheet.style.boxShadow;
     const originalRadius = sheet.style.borderRadius;
@@ -125,6 +125,11 @@
     renderLogo(); renderPreview(); renderDate();
   }
 
+  function setQuotationNumber(number) {
+    state.quotationNumber = String(number || '');
+    showValue('preview-number', state.quotationNumber);
+  }
+
   async function init() {
     try {
       const authInfo = await window.BKAuth.checkRoleGate(['Sales'], '/admin.html');
@@ -139,10 +144,11 @@
       const settingsMap = Object.fromEntries((settings || []).map(item => [item.key, item.value || {}]));
       state.companyProfile = settingsMap.company_profile_config || {};
       restoreSettings(settingsMap[CONFIG_KEY]); renderLogo(); renderPreview(); renderDate(); bindEvents();
-      window.BKQuotationFiles.init({
+      await window.BKQuotationFiles.init({
         sb, companyId:state.companyId, toast,
         capture:() => window.BKQuotationDocument.capture(collectSettings(), state.companyProfile, state.documentDate),
-        restore:restoreDocument
+        restore:restoreDocument,
+        setQuotationNumber
       });
       byId('quotation-loading').hidden = true; byId('quotation-sheet').hidden = false;
     } catch (error) {

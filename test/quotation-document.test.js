@@ -60,3 +60,16 @@ test('older saved quotations restore the default title size', () => {
   delete saved.pages[0].fields['quotation-title-font-size'];
   assert.equal(document.validate(saved).pages[0].fields['quotation-title-font-size'], '32');
 });
+
+test('quotation numbers start at zero and advance within the Manila save date', () => {
+  assert.equal(document.nextQuotationNumber('2026-09-07'), '090726-0000');
+  assert.equal(document.nextQuotationNumber('2026-09-07', '090726-0000'), '090726-0001');
+  assert.equal(document.nextQuotationNumber('2026-09-08', '090726-0042'), '090826-0000');
+  assert.throws(() => document.nextQuotationNumber('2026-09-07', '090726-9999'));
+  assert.throws(() => document.nextQuotationNumber('09/07/2026'));
+});
+
+test('quotation number is generated metadata rather than an editable snapshot field', () => {
+  assert.equal(document.FIELD_IDS.includes('quotation-number'), false);
+  assert.equal(Object.hasOwn(document.DEFAULTS, 'quotation-number'), false);
+});

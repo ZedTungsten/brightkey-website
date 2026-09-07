@@ -38,6 +38,7 @@ test('goal settings place Save in the topmost Sales Goals header and keep target
   assert.match(source, /html\[data-sales-goals-tab="settings"\] #btn-save-goal-settings\s*\{\s*display:\s*inline-flex;/);
   assert.equal((source.match(/>\s*Save Goal Settings\s*</g) || []).length, 1);
   assert.match(source, /\.goal-settings-table td\.achieved-column\s*\{\s*font-size:\s*0\.85rem;/);
-  assert.match(source, /\.stats-target-grid\s*\{[\s\S]*?grid-template-columns:\s*minmax\(150px, 0\.75fr\) minmax\(220px, 1\.25fr\);/);
-  assert.match(source, /\.stats-target-grid > :nth-child\(2\) \.form-label\s*\{\s*white-space:\s*nowrap;/);
+  assert.match(source, /\.settings-layout\s*\{[\s\S]*?grid-template-columns:\s*minmax\(720px, 1fr\) minmax\(560px, 1\.35fr\);/);
+  assert.match(source, /\.stats-target-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(250px, 1fr\)\);/);
+  assert.match(source, /\.stats-target-grid \.form-label\s*\{\s*white-space:\s*nowrap;/);
 });
