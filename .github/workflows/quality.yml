@@ -64,5 +64,28 @@ jobs:
       - name: Show migration history
         run: supabase migration list
 
+      # One-time ledger reconciliation. The production schema already contains
+      # these authoritative repository migrations under older generated version
+      # numbers; this changes migration history only, not schema objects or data.
+      - name: Reconcile historical migration versions
+        run: |
+          supabase migration repair --status reverted \
+            20260325030724 20260325120736 20260518211035 \
+            20260817062253 20260820232038 20260820233034 \
+            20260821002015 20260821060010 20260821070515 \
+            20260829030152 20260831125045 20260831125517 \
+            20260901020144 20260901132340 20260902004042 \
+            20260902133749 20260903034150 20260903051340 \
+            20260903051927 20260903052145 20260903160638 \
+            20260907012103 20260907075521
+          supabase migration repair --status applied \
+            20260903030410 20260903050000 20260903051000 \
+            20260903052000 20260903160318 20260904060000 \
+            20260905072206 20260905090000 20260907093000
+          supabase migration list
+
       - name: Apply pending migrations
         run: supabase db push
+
+      - name: Verify migration history
+        run: supabase migration list
