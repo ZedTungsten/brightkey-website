@@ -10,11 +10,9 @@
     baseImage: null,
     images: [],
     activeIndex: -1,
-    overlays: { watermark: null, template: null },
     selected: null,
     drag: null,
-    modalType: null,
-    draftOverlay: null,
+    pan: null,
     urls: [],
     sb: null,
     companyId: null,
@@ -31,12 +29,12 @@
   const canvasFrame = document.getElementById('editor-canvas-frame');
   const interactionCanvas = document.getElementById('image-interaction-canvas');
   const interactionContext = interactionCanvas.getContext('2d');
-  const preview = document.getElementById('overlay-preview-canvas');
-  const previewContext = preview.getContext('2d');
   const HANDLE_SIZE = 20;
   let draggedLayerIndex = null;
   let zoomScrollFrame = 0;
   let projects = null;
+  let effects = null;
+  let properties = null;
   function canvasCreatedKey() { return `bk-posting-image-editor-canvas:${state.companyId}`; }
   function rememberCanvasCreated() {
     try { localStorage.setItem(canvasCreatedKey(), '1'); }
@@ -84,6 +82,27 @@
     });
   }
 
+  function isHeicFile(file) {
+    const type = String(file?.type || '').toLowerCase();
+    return ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'].includes(type)
+      || /\.(heic|heif)$/i.test(file?.name || '');
+  }
+
+  async function prepareImageFile(file) {
+    if (!isHeicFile(file)) return file;
+    if (typeof window.heic2any !== 'function') {
+      throw new Error('HEIC conversion is temporarily unavailable. Please refresh and try again.');
+    }
+    const result = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    const jpeg = Array.isArray(result) ? result[0] : result;
+    if (!(jpeg instanceof Blob)) throw new Error('The HEIC image could not be converted to JPEG.');
+    const baseName = String(file.name || 'image').replace(/\.(heic|heif)$/i, '');
+    return new File([jpeg], `${baseName}.jpg`, {
+      type: 'image/jpeg',
+      lastModified: file.lastModified || Date.now()
+    });
+  }
+
   function fitTransform(image, mode) {
     const scale = mode === 'height'
       ? state.height / image.naturalHeight
@@ -99,7 +118,7 @@
     return { x: target.x + target.width / 2, y: target.y + target.height / 2 };
   }
 
-  function drawImageTransformed(ctx, target) {
+  function drawRawImageTransformed(ctx, target) {
     const center = imageCenter(target);
     ctx.save();
     ctx.translate(center.x, center.y);
@@ -110,17 +129,15 @@
     ctx.restore();
   }
 
+  function drawImageTransformed(ctx, target) {
+    effects?.draw(ctx, target);
+    drawRawImageTransformed(ctx, target);
+  }
+
   function updateImageProperties() {
     const target = state.selected === 'image' ? activeImage() : null;
-    const disabled = !target;
-    const properties = document.getElementById('image-properties'); properties.hidden = disabled; properties.setAttribute('aria-disabled', String(disabled));
-    ['reset-image-dimensions', 'reset-image-rotation', 'reset-image-opacity', 'image-opacity', 'flip-image-horizontal', 'flip-image-vertical']
-      .forEach(id => { document.getElementById(id).disabled = disabled; });
-    document.getElementById('image-dimensions-value').textContent = target ? `${Math.round(target.width)} × ${Math.round(target.height)} px` : 'No image selected';
-    document.getElementById('image-rotation-value').textContent = `${Math.round(target?.rotation || 0)}°`;
-    const opacity = Math.round((target?.opacity ?? 1) * 100);
-    document.getElementById('image-opacity-value').textContent = `${opacity}%`;
-    document.getElementById('image-opacity').value = String(opacity);
+    properties?.update(target);
+    effects?.update(target);
   }
 
   function drawSelection(target, ctx, scaleFactor) {
@@ -170,6 +187,17 @@
     const local = { x: -target.width / 2, y: -target.height / 2, width: target.width, height: target.height };
     drawSelection(local, ctx, scaleFactor);
     const handle = HANDLE_SIZE / scaleFactor;
+    const duplicateX = local.x;
+    const duplicateY = local.y;
+    ctx.fillStyle = '#06B6D4';
+    ctx.fillRect(duplicateX - handle / 2, duplicateY - handle / 2, handle, handle);
+    const boxSize = 7 / scaleFactor;
+    const boxOffset = 2.5 / scaleFactor;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5 / scaleFactor;
+    ctx.lineJoin = 'round';
+    ctx.strokeRect(duplicateX - boxSize / 2 + boxOffset, duplicateY - boxSize / 2 - boxOffset, boxSize, boxSize);
+    ctx.strokeRect(duplicateX - boxSize / 2 - boxOffset, duplicateY - boxSize / 2 + boxOffset, boxSize, boxSize);
     const cornerX = local.x + local.width;
     const cornerY = local.y;
     ctx.fillStyle = '#06B6D4';
@@ -203,15 +231,6 @@
     context.fillRect(0, 0, state.width, state.height);
     if (state.baseImage) context.drawImage(state.baseImage, 0, 0, state.width, state.height);
     state.images.forEach(image => drawImageTransformed(context, image));
-    const current = activeImage();
-    ['watermark', 'template'].forEach(type => {
-      const overlay = state.overlays[type];
-      if (!overlay) return;
-      context.save();
-      context.globalAlpha = overlay.opacity;
-      context.drawImage(overlay.image, overlay.x, overlay.y, overlay.width, overlay.height);
-      context.restore();
-    });
     drawInteractionOverlay();
     updateImageProperties();
   }
@@ -261,7 +280,7 @@
     interactionContext.rect(originX, originY, interactionCanvas.width, interactionCanvas.height);
     interactionContext.rect(0, 0, state.width, state.height);
     interactionContext.clip('evenodd');
-    drawImageTransformed(interactionContext, { ...target, opacity: (target.opacity ?? 1) * 0.25 });
+    drawRawImageTransformed(interactionContext, { ...target, opacity: (target.opacity ?? 1) * 0.25 });
     interactionContext.restore();
     interactionContext.save();
     interactionContext.translate(-originX, -originY);
@@ -282,6 +301,7 @@
     canvasFrame.style.display = 'block';
     document.getElementById('canvas-zoom').hidden = false;
     document.getElementById('source-images').disabled = false;
+    document.getElementById('browse-installer-images').disabled = false;
     document.getElementById('upload-label').classList.remove('disabled');
     document.getElementById('upload-label').setAttribute('aria-disabled', 'false');
     document.getElementById('fill-height').disabled = false;
@@ -295,7 +315,9 @@
     const fitScale = availableHeight / state.height;
     const scale = fitScale * state.zoom / 100;
     state.displayScale = scale;
-    document.getElementById('zoom-slider').value = String(state.zoom);
+    const zoomSlider = document.getElementById('zoom-slider');
+    zoomSlider.value = String(state.zoom);
+    zoomSlider.style.setProperty('--zoom-progress', `${((state.zoom - 25) / 175) * 100}%`);
     document.getElementById('zoom-value').textContent = `${state.zoom}%`;
     drawCanvas();
   }
@@ -392,12 +414,13 @@
 
   async function uploadSources(files) {
     if (!state.canvasReady) return;
-    const valid = [...files].filter(file => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type));
+    const valid = [...files].filter(file => ['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || isHeicFile(file));
     if (!valid.length) return;
-    const loaded = await Promise.all(valid.map(async file => ({ ...await loadFile(file), name: file.name, file })));
+    const prepared = await Promise.all(valid.map(prepareImageFile));
+    const loaded = await Promise.all(prepared.map(async file => ({ ...await loadFile(file), name: file.name, file })));
     loaded.forEach(({ image, url, name, file }) => {
       const transform = fitTransform(image, 'contain');
-      state.images.push({ image, url, name, file, ...transform, originalWidth: transform.width, originalHeight: transform.height, rotation: 0, opacity: 1, flipX: false, flipY: false });
+      state.images.push({ image, url, name, file, ...transform, originalWidth: transform.width, originalHeight: transform.height, rotation: 0, opacity: 1, flipX: false, flipY: false, effects: effects.defaults() });
     });
     if (state.activeIndex < 0) state.activeIndex = 0;
     state.selected = 'image';
@@ -422,6 +445,33 @@
         else reject(new Error('Canvas could not be encoded.'));
       }, 'image/png');
     });
+  }
+
+  async function downloadCanvas() {
+    if (!state.canvasReady) return;
+    const button = document.getElementById('header-download-canvas');
+    button.disabled = true;
+    button.textContent = 'Downloading...';
+    try {
+      const blob = await canvasBlob();
+      const url = URL.createObjectURL(blob);
+      const baseName = (state.currentProjectName || `image-editor-${state.width}x${state.height}`)
+        .trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'image-editor';
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${baseName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      toast(`Downloaded ${state.width} × ${state.height} PNG.`);
+    } catch (error) {
+      console.error(error);
+      toast('The canvas could not be downloaded. Please try again.');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Download';
+    }
   }
 
   function updateSizeAction() {
@@ -470,7 +520,11 @@
   }
 
   function openSaveDimensions() {
-    if (!state.canvasReady) return;
+    const width = Number(document.getElementById('canvas-width').value);
+    const height = Number(document.getElementById('canvas-height').value);
+    const valid = Number.isInteger(width) && Number.isInteger(height) && width >= 100 && width <= 8000 && height >= 100 && height <= 8000;
+    document.getElementById('size-error').hidden = valid;
+    if (!valid) return;
     const input = document.getElementById('saved-dimensions-name');
     document.getElementById('save-dimensions-error').hidden = true;
     input.style.borderColor = '';
@@ -484,17 +538,19 @@
     const errorNode = document.getElementById('save-dimensions-error');
     const button = document.getElementById('confirm-save-dimensions');
     const name = input.value.trim();
+    const width = Number(document.getElementById('canvas-width').value);
+    const height = Number(document.getElementById('canvas-height').value);
     errorNode.hidden = Boolean(name);
     input.style.borderColor = name ? '' : 'var(--danger)';
-    if (!name || !state.canvasReady || !state.companyId) { if (!name) input.focus(); return; }
+    if (!name || !state.companyId) { if (!name) input.focus(); return; }
     button.disabled = true;
     button.textContent = 'Saving...';
     try {
       const { error } = await state.sb.from('posting_image_canvases').insert({
         company_id: state.companyId,
         name,
-        width: state.width,
-        height: state.height,
+        width,
+        height,
         image_path: '',
         project_data: null
       });
@@ -536,6 +592,13 @@
       && point.y >= cornerY - half && point.y <= cornerY + half;
   }
 
+  function isDuplicateHandle(target, point, handleSize) {
+    if (!target) return false;
+    const half = handleSize / 2;
+    return point.x >= target.x - half && point.x <= target.x + half
+      && point.y >= target.y - half && point.y <= target.y + half;
+  }
+
   function imageLocalPoint(target, point) {
     const center = imageCenter(target);
     const angle = -(target.rotation || 0) * Math.PI / 180;
@@ -562,13 +625,12 @@
     const active = activeImage();
     if (active) {
       const localPoint = imageLocalPoint(active, point);
-      const action = isRotateHandle(active, localPoint, handle) ? 'rotate'
-        : isResizeHandle(active, localPoint, handle) ? 'resize'
-          : contains(active, localPoint) ? 'move' : null;
+      const action = isDuplicateHandle(active, localPoint, handle) ? 'duplicate'
+        : isRotateHandle(active, localPoint, handle) ? 'rotate'
+        : isResizeHandle(active, localPoint, handle) ? 'resize' : null;
       if (action) return { type: 'image', target: active, action, localPoint, index: state.activeIndex };
     }
     for (let index = state.images.length - 1; index >= 0; index -= 1) {
-      if (index === state.activeIndex) continue;
       const image = state.images[index];
       const localPoint = imageLocalPoint(image, point);
       if (contains(image, localPoint)) return { type: 'image', target: image, action: 'move', localPoint, index };
@@ -578,13 +640,42 @@
 
   function updateCanvasCursor(point) {
     const { action } = canvasTargetAt(point);
-    interactionCanvas.style.cursor = action === 'rotate' ? 'grab' : action === 'resize' ? 'nwse-resize' : action === 'move' ? 'move' : 'default';
+    interactionCanvas.style.cursor = action === 'duplicate' ? 'copy' : action === 'rotate' ? 'grab' : action === 'resize' ? 'nwse-resize' : action === 'move' ? 'move' : 'grab';
+  }
+
+  function duplicateImage(target) {
+    const duplicate = { ...target, x: target.x + 10, y: target.y + 10, name: `${target.name || 'Image'} copy`, effects: effects.clone(target.effects) };
+    const originalIndex = state.images.indexOf(target);
+    const duplicateIndex = originalIndex >= 0 ? originalIndex + 1 : state.images.length;
+    state.images.splice(duplicateIndex, 0, duplicate);
+    state.activeIndex = duplicateIndex;
+    state.selected = 'image';
+    projects.markDirty();
+    renderStrip();
+    drawCanvas();
   }
 
   function onCanvasPointerDown(event) {
     const point = canvasPoint(event, interactionCanvas);
     const { type, target, action, localPoint, index } = canvasTargetAt(point);
-    if (!type) { state.selected = null; drawCanvas(); return; }
+    if (!type) {
+      const stage = document.getElementById('canvas-stage');
+      state.selected = null;
+      state.pan = {
+        pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY,
+        startScrollLeft: stage.scrollLeft, startScrollTop: stage.scrollTop
+      };
+      interactionCanvas.style.cursor = 'grabbing';
+      interactionCanvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      drawCanvas();
+      return;
+    }
+    if (action === 'duplicate') {
+      duplicateImage(target);
+      updateCanvasCursor(point);
+      return;
+    }
     state.activeIndex = index;
     state.selected = type;
     renderStrip();
@@ -606,8 +697,14 @@
 
   function onCanvasPointerMove(event) {
     const point = canvasPoint(event, interactionCanvas);
+    if (state.pan) {
+      const stage = document.getElementById('canvas-stage');
+      stage.scrollLeft = state.pan.startScrollLeft - (event.clientX - state.pan.startClientX);
+      stage.scrollTop = state.pan.startScrollTop - (event.clientY - state.pan.startClientY);
+      return;
+    }
     if (!state.drag) { updateCanvasCursor(point); return; }
-    const target = state.drag.type === 'image' ? activeImage() : state.overlays[state.drag.type];
+    const target = activeImage();
     const dx = point.x - state.drag.startX;
     const dy = point.y - state.drag.startY;
     if (state.drag.action === 'rotate') {
@@ -630,8 +727,9 @@
   }
 
   function onCanvasPointerUp(event) {
-    if (state.drag) interactionCanvas.releasePointerCapture(event.pointerId);
+    if (state.drag || state.pan) interactionCanvas.releasePointerCapture(event.pointerId);
     state.drag = null;
+    state.pan = null;
     updateCanvasCursor(canvasPoint(event, interactionCanvas));
   }
 
@@ -649,106 +747,10 @@
     state.activeIndex = -1;
     state.selected = null;
     state.drag = null;
+    state.pan = null;
     projects.markDirty();
     renderStrip();
     drawCanvas();
-  }
-
-  function drawOverlayPreview() {
-    previewContext.clearRect(0, 0, preview.width, preview.height);
-    previewContext.fillStyle = state.background;
-    previewContext.fillRect(0, 0, preview.width, preview.height);
-    const current = activeImage();
-    const scale = Math.min(preview.width / state.width, preview.height / state.height);
-    const offsetX = (preview.width - state.width * scale) / 2;
-    const offsetY = (preview.height - state.height * scale) / 2;
-    previewContext.save();
-    previewContext.translate(offsetX, offsetY);
-    previewContext.scale(scale, scale);
-    if (state.baseImage) previewContext.drawImage(state.baseImage, 0, 0, state.width, state.height);
-    if (current) drawImageTransformed(previewContext, current);
-    if (state.draftOverlay) {
-      previewContext.globalAlpha = state.draftOverlay.opacity;
-      previewContext.drawImage(state.draftOverlay.image, state.draftOverlay.x, state.draftOverlay.y, state.draftOverlay.width, state.draftOverlay.height);
-      previewContext.globalAlpha = 1;
-      drawSelection(state.draftOverlay, previewContext, scale);
-    }
-    previewContext.restore();
-  }
-
-  function openOverlay(type) {
-    state.modalType = type;
-    const existing = state.overlays[type];
-    state.draftOverlay = existing ? { ...existing } : null;
-    document.getElementById('overlay-title').textContent = type === 'watermark' ? 'Watermark' : 'Template';
-    document.getElementById('overlay-description').textContent = `${type === 'watermark' ? 'Watermark' : 'Template'} is applied to all uploaded images.`;
-    const opacity = Math.round((state.draftOverlay?.opacity ?? 1) * 100);
-    document.getElementById('overlay-opacity').value = String(opacity);
-    document.getElementById('overlay-opacity-value').textContent = `${opacity}%`;
-    document.getElementById('overlay-preview-empty').hidden = Boolean(state.draftOverlay);
-    document.getElementById('apply-overlay').disabled = !state.draftOverlay;
-    drawOverlayPreview();
-    openModal(document.getElementById('overlay-modal'));
-  }
-
-  async function loadOverlay(file) {
-    if (!file || file.type !== 'image/png') return;
-    const { image, url } = await loadFile(file);
-    const maxWidth = state.width * 0.7;
-    const maxHeight = state.height * 0.7;
-    const scale = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1);
-    const width = image.naturalWidth * scale;
-    const height = image.naturalHeight * scale;
-    state.draftOverlay = { image, url, file, opacity: Number(document.getElementById('overlay-opacity').value) / 100, x: (state.width - width) / 2, y: (state.height - height) / 2, width, height };
-    document.getElementById('overlay-preview-empty').hidden = true;
-    document.getElementById('apply-overlay').disabled = false;
-    drawOverlayPreview();
-  }
-
-  function previewPointerDown(event) {
-    if (!state.draftOverlay) return;
-    const point = canvasPoint(event, preview);
-    const scale = Math.min(preview.width / state.width, preview.height / state.height);
-    const offsetX = (preview.width - state.width * scale) / 2;
-    const offsetY = (preview.height - state.height * scale) / 2;
-    const canvasPosition = { x: (point.x - offsetX) / scale, y: (point.y - offsetY) / scale };
-    const handle = HANDLE_SIZE / scale;
-    if (!contains(state.draftOverlay, canvasPosition) && !isResizeHandle(state.draftOverlay, canvasPosition, handle)) return;
-    const resizing = isResizeHandle(state.draftOverlay, canvasPosition, handle);
-    state.drag = { type: 'draft', resizing, startX: canvasPosition.x, startY: canvasPosition.y, original: { x: state.draftOverlay.x, y: state.draftOverlay.y, width: state.draftOverlay.width, height: state.draftOverlay.height }, previewScale: scale, offsetX, offsetY };
-    preview.style.cursor = resizing ? 'nwse-resize' : 'move';
-    preview.setPointerCapture(event.pointerId);
-  }
-
-  function previewPointerMove(event) {
-    const point = canvasPoint(event, preview);
-    const scale = Math.min(preview.width / state.width, preview.height / state.height);
-    const offsetX = (preview.width - state.width * scale) / 2;
-    const offsetY = (preview.height - state.height * scale) / 2;
-    const hoverPosition = { x: (point.x - offsetX) / scale, y: (point.y - offsetY) / scale };
-    if (state.drag?.type !== 'draft') {
-      const handle = HANDLE_SIZE / scale;
-      preview.style.cursor = isResizeHandle(state.draftOverlay, hoverPosition, handle) ? 'nwse-resize' : contains(state.draftOverlay, hoverPosition) ? 'move' : 'default';
-      return;
-    }
-    const position = { x: (point.x - state.drag.offsetX) / state.drag.previewScale, y: (point.y - state.drag.offsetY) / state.drag.previewScale };
-    const dx = position.x - state.drag.startX;
-    const dy = position.y - state.drag.startY;
-    if (state.drag.resizing) {
-      const ratio = state.drag.original.width / state.drag.original.height;
-      state.draftOverlay.width = Math.max(40, state.drag.original.width + dx);
-      state.draftOverlay.height = state.draftOverlay.width / ratio;
-    } else {
-      state.draftOverlay.x = state.drag.original.x + dx;
-      state.draftOverlay.y = state.drag.original.y + dy;
-    }
-    drawOverlayPreview();
-  }
-
-  function previewPointerUp(event) {
-    if (state.drag?.type === 'draft') preview.releasePointerCapture(event.pointerId);
-    state.drag = null;
-    previewPointerMove(event);
   }
 
   function resizeCanvas() {
@@ -764,7 +766,6 @@
     state.baseImage = null;
     state.images = [];
     state.activeIndex = -1;
-    state.overlays = { watermark: null, template: null };
     state.selected = null;
     state.drag = null;
     state.currentProjectId = null;
@@ -772,7 +773,7 @@
     state.baseImagePath = null;
     rememberCanvasCreated();
     projects.markDirty();
-    interactionCanvas.style.cursor = 'default';
+    interactionCanvas.style.cursor = 'grab';
     renderStrip();
     showCanvas();
     closeModal(document.getElementById('size-modal'));
@@ -804,6 +805,9 @@
     state.companyId = company.id;
     const projectApp = { state, canvasBlob, closeModal, openModal, renderStrip, rememberCanvasCreated, showCanvas, solidImageColor, toast, guard: null };
     projects = window.BKImageEditorProjects.create(projectApp);
+    effects = window.BKImageEditorEffects.create({ state, activeImage, drawCanvas, drawRawImageTransformed, markDirty: projects.markDirty }); effects.bind();
+    properties = window.BKImageEditorProperties.create({ activeImage, drawCanvas, markDirty: projects.markDirty }); properties.bind();
+    window.BKImageEditorMediaBrowser.create({ state, addFiles: uploadSources, closeModal, openModal, toast }).bind();
     projectApp.guard = window.BKImageEditorUnsavedGuard.create({ closeModal, isDirty: () => state.projectDirty, markDirty: projects.markDirty, openModal, saveBeforeLeave: projects.saveBeforeLeave });
     projectApp.guard.bind();
     projects.updateSaveButton();
@@ -889,7 +893,6 @@
       drawCanvas();
     });
     document.getElementById('open-size-modal').addEventListener('click', openSizeModal);
-    document.getElementById('load-canvas-dimensions').addEventListener('click', openSizeModal);
     document.getElementById('save-canvas-dimensions').addEventListener('click', openSaveDimensions);
     document.getElementById('confirm-save-dimensions').addEventListener('click', saveDimensions);
     document.getElementById('saved-dimensions-name').addEventListener('keydown', event => { if (event.key === 'Enter') saveDimensions(); });
@@ -913,41 +916,58 @@
       updateSizeAction();
     }));
     document.getElementById('header-save-canvas').addEventListener('click', projects.openSave);
-    document.getElementById('save-canvas').addEventListener('click', projects.save);
+    document.getElementById('header-download-canvas').addEventListener('click', downloadCanvas);
+    document.getElementById('save-canvas').addEventListener('click', () => projects.save());
+    document.getElementById('confirm-overwrite-document').addEventListener('click', event => projects.confirmOverwrite(event.currentTarget));
+    document.querySelectorAll('[data-cancel-overwrite]').forEach(button => button.addEventListener('click', projects.cancelOverwrite));
+    document.getElementById('overwrite-document-modal').addEventListener('click', event => { if (event.target === event.currentTarget) projects.cancelOverwrite(); });
     document.getElementById('saved-canvas-name').addEventListener('keydown', event => { if (event.key === 'Enter') projects.save(); });
     document.getElementById('header-load-canvas').addEventListener('click', projects.openLoad);
+    document.getElementById('saved-canvases-list').addEventListener('change', event => {
+      const checkbox = event.target.closest('[data-select-canvas-id]');
+      if (checkbox) projects.toggleSelection(checkbox.dataset.selectCanvasId, checkbox.checked);
+    });
     document.getElementById('saved-canvases-list').addEventListener('click', event => {
-      const deleteButton = event.target.closest('[data-delete-canvas-id]');
-      if (deleteButton) {
-        const saved = state.savedCanvases.find(item => item.id === deleteButton.dataset.deleteCanvasId);
-        if (saved) projects.openDelete(saved);
+      if (event.target.closest('[data-select-canvas-id]')) return;
+      const editButton = event.target.closest('[data-edit-canvas-id]');
+      if (editButton) { projects.startRename(editButton.dataset.editCanvasId); return; }
+      const cancelRename = event.target.closest('[data-cancel-rename-id]');
+      if (cancelRename) { projects.cancelRename(); return; }
+      const applyRename = event.target.closest('[data-apply-rename-id]');
+      if (applyRename) {
+        const input = applyRename.closest('.saved-canvas-card')?.querySelector('[data-rename-canvas-input]');
+        projects.applyRename(applyRename.dataset.applyRenameId, input?.value, applyRename);
         return;
       }
-      const button = event.target.closest('[data-canvas-id]');
-      if (!button) return;
-      const saved = state.savedCanvases.find(item => item.id === button.dataset.canvasId);
-      if (saved) projects.load(saved, button);
+      if (event.target.closest('[data-rename-canvas-input]')) return;
+      const loadButton = event.target.closest('[data-canvas-id]');
+      if (loadButton) {
+        const saved = state.savedCanvases.find(item => item.id === loadButton.dataset.canvasId);
+        if (saved) projects.requestLoad(saved, loadButton);
+        return;
+      }
+      const row = event.target.closest('.saved-canvas-card');
+      const checkbox = row?.querySelector('[data-select-canvas-id]');
+      if (checkbox) projects.toggleSelection(checkbox.dataset.selectCanvasId, !checkbox.checked);
     });
+    document.getElementById('saved-canvases-list').addEventListener('keydown', event => {
+      const input = event.target.closest('[data-rename-canvas-input]');
+      if (!input) return;
+      if (event.key === 'Escape') { event.preventDefault(); projects.cancelRename(); }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const applyButton = input.closest('.saved-canvas-card')?.querySelector('[data-apply-rename-id]');
+        if (applyButton) projects.applyRename(applyButton.dataset.applyRenameId, input.value, applyButton);
+      }
+    });
+    document.getElementById('saved-files-search').addEventListener('input', event => projects.setSearchQuery(event.target.value));
+    document.getElementById('select-all-saved-files').addEventListener('click', projects.selectAllVisible);
+    document.getElementById('deselect-all-saved-files').addEventListener('click', projects.deselectAll);
+    document.getElementById('duplicate-selected-documents').addEventListener('click', event => projects.duplicateSelected(event.currentTarget));
+    document.getElementById('delete-selected-documents').addEventListener('click', () => projects.openDelete());
+    document.getElementById('discard-current-document-changes').addEventListener('click', projects.discardChangesAndLoad);
+    document.getElementById('save-current-document-changes').addEventListener('click', event => projects.saveChangesAndLoad(event.currentTarget));
     document.getElementById('confirm-delete-document').addEventListener('click', projects.remove);
-    document.getElementById('open-watermark-modal').addEventListener('click', () => openOverlay('watermark'));
-    document.getElementById('open-template-modal').addEventListener('click', () => openOverlay('template'));
-    document.getElementById('overlay-file').addEventListener('change', event => loadOverlay(event.target.files[0]).catch(() => toast('The PNG could not be loaded.')));
-    document.getElementById('overlay-opacity').addEventListener('input', event => {
-      const value = Number(event.target.value);
-      document.getElementById('overlay-opacity-value').textContent = `${value}%`;
-      if (state.draftOverlay) state.draftOverlay.opacity = value / 100;
-      drawOverlayPreview();
-    });
-    document.getElementById('apply-overlay').addEventListener('click', () => {
-      if (!state.draftOverlay || !state.modalType) return;
-      state.overlays[state.modalType] = { ...state.draftOverlay };
-      state.selected = state.modalType;
-      projects.markDirty();
-      closeModal(document.getElementById('overlay-modal'));
-      drawCanvas();
-      toast(`${state.modalType === 'watermark' ? 'Watermark' : 'Template'} applied to all images.`);
-    });
-
     const color = document.getElementById('background-color');
     const hex = document.getElementById('background-hex');
     color.addEventListener('input', () => { state.background = color.value.toUpperCase(); hex.value = state.background; projects.markDirty(); drawCanvas(); });
@@ -962,19 +982,15 @@
     });
 
     document.querySelectorAll('[data-close-modal]').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.editor-modal'))));
-    document.querySelectorAll('.editor-modal').forEach(modal => modal.addEventListener('click', event => { if (event.target === modal) closeModal(modal); }));
+    document.querySelectorAll('.editor-modal').forEach(modal => modal.addEventListener('click', event => { if (event.target === modal && !modal.hasAttribute('data-static-modal')) closeModal(modal); }));
     document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') document.querySelectorAll('.editor-modal.open').forEach(closeModal);
+      if (event.key === 'Escape') { projects.cancelOverwrite(); document.querySelectorAll('.editor-modal.open:not([data-static-modal])').forEach(closeModal); }
       deleteSelectedImage(event);
     });
     interactionCanvas.addEventListener('pointerdown', onCanvasPointerDown);
     interactionCanvas.addEventListener('pointermove', onCanvasPointerMove);
     interactionCanvas.addEventListener('pointerup', onCanvasPointerUp);
     interactionCanvas.addEventListener('pointercancel', onCanvasPointerUp);
-    preview.addEventListener('pointerdown', previewPointerDown);
-    preview.addEventListener('pointermove', previewPointerMove);
-    preview.addEventListener('pointerup', previewPointerUp);
-    preview.addEventListener('pointercancel', previewPointerUp);
     new ResizeObserver(() => applyZoom()).observe(document.getElementById('canvas-stage'));
     window.addEventListener('beforeunload', () => state.urls.forEach(URL.revokeObjectURL));
     if (!hasCreatedCanvas()) openSizeModal();
