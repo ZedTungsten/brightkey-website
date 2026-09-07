@@ -7,6 +7,7 @@
   const PAGE_SIZE = 10;
   const BOOKING_BATCH_SIZE = 100;
   const JSZIP_URL = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+  const IMAGE_EDITOR_HANDOFF_KEY = 'bk-posting-image-editor-import';
 
   const state = {
     companyId: null,
@@ -18,7 +19,8 @@
     page: 0,
     loadToken: 0,
     mediaObserver: null,
-    zipPromise: null
+    zipPromise: null,
+    previewImageUrl: ''
   };
 
   const getSb = () => window.BKAuth.sb;
@@ -197,6 +199,7 @@
     const image = document.getElementById('media-image-preview');
     const error = document.getElementById('media-image-error');
     error.hidden = true;
+    state.previewImageUrl = url;
     image.hidden = false;
     image.src = url;
     modal.style.display = 'flex';
@@ -211,7 +214,19 @@
     modal.classList.remove('open');
     modal.setAttribute('aria-hidden', 'true');
     image.removeAttribute('src');
+    state.previewImageUrl = '';
     setTimeout(() => { modal.style.display = 'none'; }, 150);
+  }
+
+  function openImageInEditor() {
+    if (!state.previewImageUrl || !SAFE_MEDIA_PATTERN.test(state.previewImageUrl) || VIDEO_PATTERN.test(state.previewImageUrl)) return;
+    try {
+      sessionStorage.setItem(IMAGE_EDITOR_HANDOFF_KEY, JSON.stringify({ url: state.previewImageUrl }));
+      window.location.assign('/dashboard/posting/image-editor');
+    } catch (error) {
+      console.error(error);
+      toast('This image could not be opened in the editor.', 'error');
+    }
   }
 
   function openVideoPreview(url) {
@@ -574,6 +589,7 @@
       document.getElementById('media-video-error').hidden = false;
     });
     document.getElementById('media-image-close').addEventListener('click', closeImagePreview);
+    document.getElementById('media-image-open-editor').addEventListener('click', openImageInEditor);
     document.getElementById('media-image-modal').addEventListener('click', event => {
       if (event.target === event.currentTarget) closeImagePreview();
     });

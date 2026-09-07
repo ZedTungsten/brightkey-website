@@ -30,16 +30,15 @@
       });
     }
 
-    async function uploadAsset(entry, root, label, uploadedPaths, copyExisting) {
+    async function uploadAsset(entry, root, label, uploadedPaths, copyExisting, forceUpload) {
       if (entry.assetPath && !copyExisting) return entry.assetPath;
-      if (entry.assetPath) {
+      if (entry.assetPath && !forceUpload) {
         const path = `${root}/${label}.${assetExtension(entry.assetPath, 'png')}`;
         const { error } = await bucket.copy(entry.assetPath, path);
-        if (error) throw error;
-        uploadedPaths.push(path);
-        return path;
+        if (!error) { uploadedPaths.push(path); return path; }
+        console.warn('Stored layer asset could not be copied; uploading its loaded source instead.', error);
       }
-      const blob = entry.file || await fetch(entry.url).then(response => response.blob());
+      const blob = entry.file || await fetch(entry.url).then(response => { if (!response.ok) throw new Error('The layer image source is no longer available.'); return response.blob(); });
       const extension = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
       const path = `${root}/${label}.${extension}`;
       const { error } = await bucket.upload(path, blob, { contentType: blob.type, cacheControl: '31536000', upsert: false });
@@ -48,18 +47,18 @@
       return path;
     }
 
-    async function buildManifest(root, uploadedPaths, copyExisting) {
+    async function buildManifest(root, uploadedPaths, copyExisting, includeBaseImage = true, forceUpload = false) {
       if (app.state.images.length > 25) throw new Error('A canvas can contain up to 25 uploaded images.');
       const images = await Promise.all(app.state.images.map(async (entry, index) => ({
         name: entry.name,
-        path: await uploadAsset(entry, root, `image-${index + 1}`, uploadedPaths, copyExisting),
+        path: await uploadAsset(entry, root, `image-${index + 1}`, uploadedPaths, copyExisting, forceUpload),
         x: entry.x, y: entry.y, width: entry.width, height: entry.height,
         originalWidth: entry.originalWidth, originalHeight: entry.originalHeight,
         rotation: entry.rotation || 0, opacity: entry.opacity ?? 1,
         flipX: Boolean(entry.flipX), flipY: Boolean(entry.flipY),
         effects: entry.effects || null
       })));
-      let baseImagePath = app.state.baseImagePath || null;
+      let baseImagePath = includeBaseImage ? app.state.baseImagePath || null : null;
       if (baseImagePath && copyExisting) {
         const copiedBasePath = `${root}/base.${assetExtension(baseImagePath, 'png')}`;
         const { error } = await bucket.copy(baseImagePath, copiedBasePath);
@@ -191,12 +190,36 @@
       query = projectsOnly ? query.not('project_data', 'is', null) : query.is('project_data', null);
       const { data, error } = await query.order('updated_at', { ascending: false }).limit(100);
       if (error) throw error;
-      app.state.savedCanvases = data || [];
+      app.state.savedCanvases = (data || []).filter(saved => projectsOnly ? saved.project_data?.kind !== 'layer-set' : true);
       return app.state.savedCanvases;
     }
 
     const fetchCanvasPresets = () => fetchSaved(false);
     const fetchProjects = () => fetchSaved(true);
+
+    async function openLayerSets() {
+      const list = document.getElementById('layer-set-list'); app.openModal(document.getElementById('load-layer-set-modal'));
+      list.innerHTML = '<div class="size-saved-state"><span class="spinner-cyan"></span><span>Loading saved layers...</span></div>';
+      const { data, error } = await app.state.sb.from('posting_image_canvases').select('id,name,width,height,project_data').eq('company_id', app.state.companyId).not('project_data','is',null).order('updated_at',{ascending:false}).limit(100);
+      if (error) { list.innerHTML = '<div class="size-saved-state">Saved layers could not be loaded.</div>'; return; }
+      const sets = (data || []).filter(item => item.project_data?.kind === 'layer-set');
+      if (!sets.length) { list.innerHTML = '<div class="size-saved-state">No saved layers yet.</div>'; return; }
+      list.replaceChildren(...sets.map(set => { const button=document.createElement('button'); button.type='button'; button.className='size-saved-option'; button.dataset.layerSetId=set.id; const name=document.createElement('strong'); name.textContent=set.name; const count=document.createElement('span'); count.textContent=`${set.project_data.images?.length || 0} layers`; button.append(name,count); button.addEventListener('click',()=>loadLayerSet(set,button)); return button; }));
+    }
+
+    function openSaveLayers() { document.getElementById('layer-set-name').value=''; document.getElementById('layer-set-name-error').hidden=true; app.openModal(document.getElementById('save-layer-set-modal')); setTimeout(()=>document.getElementById('layer-set-name').focus(),0); }
+    async function saveLayerSet() {
+      const input=document.getElementById('layer-set-name'), button=document.getElementById('confirm-save-layer-set'), name=input.value.trim(); document.getElementById('layer-set-name-error').hidden=Boolean(name);
+      if (!name || !app.state.images.length) return; button.disabled=true; button.textContent='Saving...'; const root=`companies/${app.state.companyId}/posting/layer-sets/${crypto.randomUUID()}`, uploaded=[];
+      try { const manifest=await buildManifest(root,uploaded,true,false,true); manifest.kind='layer-set'; const {error}=await app.state.sb.from('posting_image_canvases').insert({company_id:app.state.companyId,name,width:app.state.width,height:app.state.height,image_path:'',project_data:manifest}); if(error) throw error; app.closeModal(document.getElementById('save-layer-set-modal')); app.toast('Layers saved.'); }
+      catch(error){ console.error(error); if(uploaded.length) await bucket.remove(uploaded); app.toast('Layers could not be saved.'); }
+      finally { button.disabled=false; button.textContent='Save Layers'; }
+    }
+    async function loadLayerSet(set,button) {
+      if (app.state.images.length+(set.project_data.images?.length||0)>25) { app.toast('A canvas can contain up to 25 uploaded images.'); return; } button.disabled=true;
+      try { const sourceWidth=Number(set.width)||app.state.width,sourceHeight=Number(set.height)||app.state.height,scale=Math.min(app.state.width/sourceWidth,app.state.height/sourceHeight),offsetX=(app.state.width-sourceWidth*scale)/2,offsetY=(app.state.height-sourceHeight*scale)/2; const loaded=await Promise.all((set.project_data.images||[]).map(async entry=>({...entry,x:offsetX+entry.x*scale,y:offsetY+entry.y*scale,width:entry.width*scale,height:entry.height*scale,originalWidth:(entry.originalWidth||entry.width)*scale,originalHeight:(entry.originalHeight||entry.height)*scale,assetPath:entry.path,url:publicUrl(entry.path),image:await loadImage(publicUrl(entry.path))}))); const start=app.state.images.length; app.state.images.push(...loaded); app.state.selectedIndices=new Set(loaded.map((_,index)=>start+index)); app.state.activeIndex=app.state.images.length-1; app.state.selected='image'; app.renderStrip(); app.drawCanvas(); markDirty(); app.closeModal(document.getElementById('load-layer-set-modal')); app.toast(`Loaded ${loaded.length} layers.`); }
+      catch(error){ console.error(error); app.toast('Saved layers could not be loaded.'); } finally { button.disabled=false; }
+    }
 
     function selectedProjects() {
       return app.state.savedCanvases.filter(saved => selectedProjectIds.has(saved.id));
@@ -448,7 +471,7 @@
       try {
         const manifest = saved.project_data;
         app.state.width = saved.width; app.state.height = saved.height; app.state.canvasReady = true; app.state.zoom = 100;
-        app.state.background = manifest?.background || '#FFFFFF'; app.state.images = []; app.state.activeIndex = -1;
+        app.state.background = manifest?.background || '#FFFFFF'; app.state.images = []; app.state.activeIndex = -1; app.state.selectedIndices.clear();
         app.state.baseImagePath = manifest?.baseImagePath || (!manifest ? saved.image_path : null);
         app.state.baseImage = app.state.baseImagePath ? await loadImage(publicUrl(app.state.baseImagePath)) : null;
         if (!manifest && app.state.baseImage) { const color = app.solidImageColor(app.state.baseImage); app.state.background = color || '#FFFFFF'; if (color) { app.state.baseImage = null; app.state.baseImagePath = null; } }
@@ -512,7 +535,7 @@
       pendingSaveResolve(false); pendingSaveResolve = null;
     });
 
-    return { applyRename, cancelOverwrite, cancelRename, confirmOverwrite, deselectAll, discardChangesAndLoad, duplicateSelected, fetchCanvasPresets, fetchProjects, markClean, markDirty, openDelete, openLoad, openSave, remove, requestLoad, save, saveBeforeLeave, saveChangesAndLoad, selectAllVisible, setSearchQuery, startRename, toggleSelection, updateSaveButton };
+    return { applyRename, cancelOverwrite, cancelRename, confirmOverwrite, deselectAll, discardChangesAndLoad, duplicateSelected, fetchCanvasPresets, fetchProjects, markClean, markDirty, openDelete, openLayerSets, openLoad, openSave, openSaveLayers, remove, requestLoad, save, saveBeforeLeave, saveChangesAndLoad, saveLayerSet, selectAllVisible, setSearchQuery, startRename, toggleSelection, updateSaveButton };
   }
 
   window.BKImageEditorProjects = { create };

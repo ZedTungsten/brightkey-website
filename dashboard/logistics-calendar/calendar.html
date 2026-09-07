@@ -903,6 +903,10 @@
         this.renderCalendar();
       },
 
+      visibleTransactions(transactions) {
+        return (transactions || []).filter(transaction => String(transaction.status || '').trim().toLowerCase() !== 'cancelled');
+      },
+
       scheduleMatchesSearch(refId, txs) {
         if (!this.searchQuery) return true;
         const installationBooking = this.installationBookings.find(booking => booking.order_no === refId);
@@ -1004,7 +1008,9 @@
             });
 
           matches.forEach(([refId, sched]) => {
-            const txs = this.activeTransactions.filter(t => t.reference_id === refId);
+            const orderTransactions = this.activeTransactions.filter(t => t.reference_id === refId);
+            const txs = this.visibleTransactions(orderTransactions);
+            if (orderTransactions.length > 0 && txs.length === 0) return;
             if (!this.scheduleMatchesSearch(refId, txs)) return;
             const customerName = txs[0]?.customer_name || 'N/A';
             
@@ -1057,7 +1063,7 @@
 
       async openDetailsModal(refId) {
         // Fallback to local cache initially so the user doesn't wait
-        let txs = this.activeTransactions.filter(t => t.reference_id === refId);
+        let txs = this.visibleTransactions(this.activeTransactions.filter(t => t.reference_id === refId));
         let db = this.deliveryBookings.find(b => b.reference_id === refId);
         let ib = this.installationBookings.find(b => b.order_no === refId);
         
@@ -1073,8 +1079,8 @@
             sb.from('installation_bookings').select('*').eq('company_id', this.companyId).eq('order_no', refId).maybeSingle()
           ]);
 
-          if (liveTxsRes.data && liveTxsRes.data.length > 0) {
-            txs = liveTxsRes.data;
+          if (liveTxsRes.data) {
+            txs = this.visibleTransactions(liveTxsRes.data);
           }
           if (liveDbRes.data) {
             db = liveDbRes.data;

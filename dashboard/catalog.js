@@ -135,7 +135,7 @@
   let isQuickEditingPrices = false;
 
   let lastPublishedAt = null;
-  let hasUnpublishedChanges = false;
+  let hasUnpublishedChanges = false, hasSessionUnpublishedChanges = false;
   let currentCompanyId = null, tenantBusinesses = [];
   let activeTab = 'basic';
   let catalogSpecDefinitions = [];
@@ -233,7 +233,7 @@
       if (!lastPublishedAt) {
         hasUnpublishedChanges = true;
       } else {
-        hasUnpublishedChanges = allProducts.some(p => {
+        hasUnpublishedChanges = hasSessionUnpublishedChanges || allProducts.some(p => {
           const upd = p.updated_at ? new Date(p.updated_at) : (p.created_at ? new Date(p.created_at) : new Date(0));
           return upd > lastPublishedAt;
         });
@@ -243,6 +243,8 @@
       console.warn("Failed checking unpublished changes:", e);
     }
   }
+
+  function markUnpublishedChanges() { hasSessionUnpublishedChanges = true; hasUnpublishedChanges = true; updatePublishStateUI(); }
 
   function updatePublishStateUI() {
     const btn = document.getElementById('btn-publish');
@@ -1639,7 +1641,7 @@
           }
         }
 
-        toast(`Updated ${selectedProductIds.length} products successfully!`, 'success');
+        markUnpublishedChanges(); toast(`Updated ${selectedProductIds.length} products successfully!`, 'success');
         selectedProductIds = [];
         const thSelectAll = document.getElementById('th-select-all');
         if (thSelectAll) thSelectAll.checked = false;
@@ -1700,7 +1702,7 @@
         }
       }
 
-      toast(editingId ? 'Product updated!' : 'Product created!', 'success');
+      markUnpublishedChanges(); toast(editingId ? 'Product updated!' : 'Product created!', 'success');
       await fetchProducts();
       if (!editingId && productId) {
         editingId = productId;
@@ -1741,7 +1743,7 @@
     deleteCallback = async () => {
       const { error } = await sbClient.from('products').delete().eq('id', id);
       if (error) { toast(`Failed: ${error.message}`, 'error'); return; }
-      toast('Product deleted.', 'success');
+      markUnpublishedChanges(); toast('Product deleted.', 'success');
       await fetchProducts();
     };
     document.getElementById('confirm-modal').classList.add('open');
@@ -1802,7 +1804,7 @@
         toast('Build triggered! Pages go live in ~2 minutes.', 'success');
         const nowStr = new Date().toISOString();
         await sbClient.from('global_settings').upsert({ key: 'last_published_at', company_id: currentCompanyId, value: { timestamp: nowStr } });
-        hasUnpublishedChanges = false;
+        hasSessionUnpublishedChanges = false; hasUnpublishedChanges = false;
         updatePublishStateUI();
       } else {
         throw new Error(`Status ${res.status}`);
@@ -2554,8 +2556,7 @@
 
           const localProduct = allProducts.find(product => product.id === editingId);
           if (localProduct) localProduct[mediaColumn] = result.url;
-          hasUnpublishedChanges = true;
-          updatePublishStateUI();
+          markUnpublishedChanges();
 
           if (statusEl) {
             statusEl.textContent = 'Saved Changes!';
@@ -2720,7 +2721,7 @@
             statusEl.style.color = 'var(--success)';
           }
 
-          await window.BKCatalogVariants.refreshAfterSave(allProducts, editingId, payload, [updateParentSkuDatalist, updateStats, populateCategoryFilter, applyFilters, checkUnpublishedChanges]);
+          await window.BKCatalogVariants.refreshAfterSave(allProducts, editingId, payload, [updateParentSkuDatalist, updateStats, populateCategoryFilter, applyFilters, markUnpublishedChanges]);
         } catch (err) {
           console.error('Autosave failed:', JSON.stringify(err), err);
           setAutosavingState(false);
@@ -3020,7 +3021,7 @@
         const { error } = await sbClient.from('products').upsert(updates);
         if (error) throw error;
 
-        toast('Prices restored successfully!');
+        markUnpublishedChanges(); toast('Prices restored successfully!');
         closeSnapshotModal();
         await fetchProducts();
       } catch (err) {
@@ -3122,7 +3123,7 @@
       const { error } = await sbClient.from('products').upsert(updates);
       if (error) throw error;
 
-      toast('Prices updated successfully!');
+      markUnpublishedChanges(); toast('Prices updated successfully!');
 
       await fetchProducts();
 

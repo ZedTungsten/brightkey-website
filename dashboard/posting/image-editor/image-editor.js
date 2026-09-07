@@ -1,6 +1,5 @@
 (function () {
   'use strict';
-
   const state = {
     width: 1080,
     height: 1080,
@@ -10,6 +9,7 @@
     baseImage: null,
     images: [],
     activeIndex: -1,
+    selectedIndices: new Set(),
     selected: null,
     drag: null,
     pan: null,
@@ -23,7 +23,6 @@
     projectDirty: false,
     baseImagePath: null
   };
-
   const canvas = document.getElementById('editor-canvas');
   const context = canvas.getContext('2d');
   const canvasFrame = document.getElementById('editor-canvas-frame');
@@ -33,8 +32,7 @@
   let draggedLayerIndex = null;
   let zoomScrollFrame = 0;
   let projects = null;
-  let effects = null;
-  let properties = null;
+  let effects = null, properties = null, importHandoff = null, resourcesBrowser = null, selection = null;
   function canvasCreatedKey() { return `bk-posting-image-editor-canvas:${state.companyId}`; }
   function rememberCanvasCreated() {
     try { localStorage.setItem(canvasCreatedKey(), '1'); }
@@ -135,7 +133,7 @@
   }
 
   function updateImageProperties() {
-    const target = state.selected === 'image' ? activeImage() : null;
+    const target = state.selected === 'image' && state.selectedIndices.size === 1 ? activeImage() : null;
     properties?.update(target);
     effects?.update(target);
   }
@@ -284,7 +282,8 @@
     interactionContext.restore();
     interactionContext.save();
     interactionContext.translate(-originX, -originY);
-    drawImageSelection(target, interactionContext, canvas.clientWidth / state.width || 1);
+    if (state.selectedIndices.size > 1) drawImageSelection(selection.bounds(), interactionContext, canvas.clientWidth / state.width || 1);
+    else drawImageSelection(target, interactionContext, canvas.clientWidth / state.width || 1);
     interactionContext.restore();
   }
 
@@ -302,6 +301,7 @@
     document.getElementById('canvas-zoom').hidden = false;
     document.getElementById('source-images').disabled = false;
     document.getElementById('browse-installer-images').disabled = false;
+    document.getElementById('open-resources').disabled = false;
     document.getElementById('upload-label').classList.remove('disabled');
     document.getElementById('upload-label').setAttribute('aria-disabled', 'false');
     document.getElementById('fill-height').disabled = false;
@@ -362,6 +362,7 @@
 
   function renderStrip() {
     const list = document.getElementById('layers-list');
+    document.getElementById('save-layer-set').disabled = !state.images.length;
     if (!state.images.length) {
       const empty = document.createElement('p');
       empty.className = 'layers-empty';
@@ -372,7 +373,7 @@
     const rows = [...state.images].map((entry, index) => ({ entry, index })).reverse().map(({ entry, index }) => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = `layer-row${index === state.activeIndex ? ' active' : ''}`;
+      button.className = `layer-row${index === state.activeIndex ? ' active' : ''}${state.selectedIndices.has(index) ? ' selected' : ''}`;
       button.dataset.layerIndex = String(index);
       button.setAttribute('aria-label', `Select ${entry.name}`);
       const handle = document.createElement('span');
@@ -389,9 +390,8 @@
       filename.textContent = entry.name;
       filename.title = entry.name;
       button.append(handle, image, filename);
-      button.addEventListener('click', () => {
-        state.activeIndex = index;
-        state.selected = 'image';
+      button.addEventListener('click', event => {
+        if (event.shiftKey) selection.toggle(index); else selection.selectOnly(index);
         renderStrip();
         drawCanvas();
       });
@@ -405,7 +405,7 @@
     const active = activeImage();
     const [moved] = state.images.splice(fromIndex, 1);
     state.images.splice(toIndex, 0, moved);
-    state.activeIndex = state.images.indexOf(active);
+    state.activeIndex = state.images.indexOf(active); state.selectedIndices = new Set([state.activeIndex]);
     state.selected = 'image';
     projects.markDirty();
     renderStrip();
@@ -423,6 +423,7 @@
       state.images.push({ image, url, name, file, ...transform, originalWidth: transform.width, originalHeight: transform.height, rotation: 0, opacity: 1, flipX: false, flipY: false, effects: effects.defaults() });
     });
     if (state.activeIndex < 0) state.activeIndex = 0;
+    state.selectedIndices = new Set([state.activeIndex]);
     state.selected = 'image';
     projects.markDirty();
     renderStrip();
@@ -623,6 +624,11 @@
   function canvasTargetAt(point) {
     const handle = HANDLE_SIZE * state.width / Math.max(canvas.clientWidth, 1);
     const active = activeImage();
+    const group = state.selectedIndices.size > 1 ? selection.bounds() : null;
+    if (group) {
+      const action = isDuplicateHandle(group, point, handle) ? 'duplicate' : isRotateHandle(group, point, handle) ? 'rotate' : isResizeHandle(group, point, handle) ? 'resize' : contains(group, point) ? 'move' : null;
+      if (action) return { type:'image', target:active, action, localPoint:point, index:state.activeIndex, group };
+    }
     if (active) {
       const localPoint = imageLocalPoint(active, point);
       const action = isDuplicateHandle(active, localPoint, handle) ? 'duplicate'
@@ -644,12 +650,8 @@
   }
 
   function duplicateImage(target) {
-    const duplicate = { ...target, x: target.x + 10, y: target.y + 10, name: `${target.name || 'Image'} copy`, effects: effects.clone(target.effects) };
-    const originalIndex = state.images.indexOf(target);
-    const duplicateIndex = originalIndex >= 0 ? originalIndex + 1 : state.images.length;
-    state.images.splice(duplicateIndex, 0, duplicate);
-    state.activeIndex = duplicateIndex;
-    state.selected = 'image';
+    if (state.selectedIndices.size > 1) selection.duplicate();
+    else { const duplicate = { ...target, x: target.x + 20, y: target.y + 20, name: `${target.name || 'Image'} copy`, effects: effects.clone(target.effects) }; const originalIndex=state.images.indexOf(target),duplicateIndex=originalIndex>=0?originalIndex+1:state.images.length; state.images.splice(duplicateIndex,0,duplicate); selection.selectOnly(duplicateIndex); }
     projects.markDirty();
     renderStrip();
     drawCanvas();
@@ -660,7 +662,7 @@
     const { type, target, action, localPoint, index } = canvasTargetAt(point);
     if (!type) {
       const stage = document.getElementById('canvas-stage');
-      state.selected = null;
+      selection.clear(); renderStrip();
       state.pan = {
         pointerId: event.pointerId, startClientX: event.clientX, startClientY: event.clientY,
         startScrollLeft: stage.scrollLeft, startScrollTop: stage.scrollTop
@@ -676,10 +678,9 @@
       updateCanvasCursor(point);
       return;
     }
-    state.activeIndex = index;
-    state.selected = type;
+    if (!state.selectedIndices.has(index)) selection.selectOnly(index);
     renderStrip();
-    const center = imageCenter(target);
+    const groupBounds=selection.bounds(), center = {x:groupBounds.x+groupBounds.width/2,y:groupBounds.y+groupBounds.height/2};
     state.drag = {
       type,
       action,
@@ -688,7 +689,7 @@
       startLocalX: localPoint.x,
       startLocalY: localPoint.y,
       startAngle: Math.atan2(point.y - center.y, point.x - center.x),
-      original: { x: target.x, y: target.y, width: target.width, height: target.height, rotation: target.rotation || 0 }
+      bounds:groupBounds, originals:selection.snapshot(), original: { x: target.x, y: target.y, width: target.width, height: target.height, rotation: target.rotation || 0 }
     };
     interactionCanvas.style.cursor = action === 'rotate' ? 'grabbing' : action === 'resize' ? 'nwse-resize' : 'move';
     interactionCanvas.setPointerCapture(event.pointerId);
@@ -704,23 +705,16 @@
       return;
     }
     if (!state.drag) { updateCanvasCursor(point); return; }
-    const target = activeImage();
     const dx = point.x - state.drag.startX;
     const dy = point.y - state.drag.startY;
     if (state.drag.action === 'rotate') {
-      const center = { x: state.drag.original.x + state.drag.original.width / 2, y: state.drag.original.y + state.drag.original.height / 2 };
+      const center = { x: state.drag.bounds.x + state.drag.bounds.width / 2, y: state.drag.bounds.y + state.drag.bounds.height / 2 };
       const angle = Math.atan2(point.y - center.y, point.x - center.x);
-      target.rotation = state.drag.original.rotation + (angle - state.drag.startAngle) * 180 / Math.PI;
+      selection.rotate(state.drag.originals,state.drag.bounds,(angle-state.drag.startAngle)*180/Math.PI);
     } else if (state.drag.action === 'resize') {
-      const localPoint = imageLocalPoint(target, point);
-      const localDx = localPoint.x - state.drag.startLocalX;
-      const ratio = state.drag.original.width / state.drag.original.height;
-      const width = Math.max(40, state.drag.original.width + localDx);
-      target.width = width;
-      target.height = width / ratio;
+      const scale=Math.max(40/Math.max(state.drag.bounds.width,state.drag.bounds.height),(point.x-state.drag.bounds.x)/Math.max(state.drag.bounds.width,1)); selection.resize(state.drag.originals,state.drag.bounds,scale);
     } else {
-      target.x = state.drag.original.x + dx;
-      target.y = state.drag.original.y + dy;
+      selection.move(state.drag.originals,dx,dy);
     }
     projects.markDirty();
     drawCanvas();
@@ -739,13 +733,9 @@
     const target = event.target;
     if (target instanceof Element && (target.matches('input, textarea, select') || target.isContentEditable)) return;
     event.preventDefault();
-    const [removed] = state.images.splice(state.activeIndex, 1);
-    if (removed?.url?.startsWith('blob:')) {
-      URL.revokeObjectURL(removed.url);
-      state.urls = state.urls.filter(url => url !== removed.url);
-    }
-    state.activeIndex = -1;
-    state.selected = null;
+    const removed = selection.selected().sort((a,b)=>b-a).map(index=>state.images.splice(index,1)[0]);
+    removed.forEach(item=>{ if(item?.url?.startsWith('blob:')) { URL.revokeObjectURL(item.url); state.urls=state.urls.filter(url=>url!==item.url); } });
+    selection.clear();
     state.drag = null;
     state.pan = null;
     projects.markDirty();
@@ -766,6 +756,7 @@
     state.baseImage = null;
     state.images = [];
     state.activeIndex = -1;
+    state.selectedIndices.clear();
     state.selected = null;
     state.drag = null;
     state.currentProjectId = null;
@@ -779,21 +770,21 @@
     closeModal(document.getElementById('size-modal'));
   }
 
-  function runSizeAction() {
+  async function runSizeAction() {
     if (!state.selectedSavedId) {
-      resizeCanvas();
+      resizeCanvas(); await importHandoff.importAfterCanvasReady();
       return;
     }
     const saved = state.savedCanvases.find(item => item.id === state.selectedSavedId);
     if (saved) {
       const name = saved.name;
-      resizeCanvas();
+      resizeCanvas(); await importHandoff.importAfterCanvasReady();
       toast(`Loaded ${name} dimensions.`);
     }
   }
 
   async function init() {
-    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'owner', 'admin'], '/admin.html');
+    const authInfo = await window.BKAuth.checkRoleGate(['Marketing', 'Sales'], '/admin.html');
     if (!authInfo) return;
     state.sb = window.BKAuth.sb;
     const { data: company, error: companyError } = await state.sb.from('companies')
@@ -803,14 +794,17 @@
       return;
     }
     state.companyId = company.id;
-    const projectApp = { state, canvasBlob, closeModal, openModal, renderStrip, rememberCanvasCreated, showCanvas, solidImageColor, toast, guard: null };
+    selection = window.BKImageEditorSelection.create({ state, cloneEffects:value=>effects.clone(value) });
+    const projectApp = { state, canvasBlob, closeModal, drawCanvas, openModal, renderStrip, rememberCanvasCreated, showCanvas, solidImageColor, toast, guard: null };
     projects = window.BKImageEditorProjects.create(projectApp);
     effects = window.BKImageEditorEffects.create({ state, activeImage, drawCanvas, drawRawImageTransformed, markDirty: projects.markDirty }); effects.bind();
     properties = window.BKImageEditorProperties.create({ activeImage, drawCanvas, markDirty: projects.markDirty }); properties.bind();
-    window.BKImageEditorMediaBrowser.create({ state, addFiles: uploadSources, closeModal, openModal, toast }).bind();
+    importHandoff = window.BKImageEditorMediaBrowser.create({ state, addFiles: uploadSources, closeModal, openModal, toast }); importHandoff.bind();
+    resourcesBrowser = window.BKImageEditorResources.create({ state, addFiles:uploadSources, closeModal, openModal, toast }); resourcesBrowser.bind();
     projectApp.guard = window.BKImageEditorUnsavedGuard.create({ closeModal, isDirty: () => state.projectDirty, markDirty: projects.markDirty, openModal, saveBeforeLeave: projects.saveBeforeLeave });
     projectApp.guard.bind();
     projects.updateSaveButton();
+    importHandoff.openPendingCanvasSetup(openSizeModal);
     if (typeof initNav === 'function') initNav();
     document.getElementById('source-images').addEventListener('change', event => uploadSources(event.target.files).catch(() => toast('One or more images could not be loaded.')));
     const layersList = document.getElementById('layers-list');
@@ -875,6 +869,7 @@
       const target = activeImage();
       if (!target) return;
       target.opacity = Number(event.target.value) / 100;
+      event.target.style.setProperty('--image-opacity-progress', `${event.target.value}%`);
       projects.markDirty();
       drawCanvas();
     });
@@ -916,6 +911,7 @@
       updateSizeAction();
     }));
     document.getElementById('header-save-canvas').addEventListener('click', projects.openSave);
+    document.getElementById('save-layer-set').addEventListener('click', projects.openSaveLayers); document.getElementById('load-layer-set').addEventListener('click', projects.openLayerSets); document.getElementById('confirm-save-layer-set').addEventListener('click', projects.saveLayerSet);
     document.getElementById('header-download-canvas').addEventListener('click', downloadCanvas);
     document.getElementById('save-canvas').addEventListener('click', () => projects.save());
     document.getElementById('confirm-overwrite-document').addEventListener('click', event => projects.confirmOverwrite(event.currentTarget));

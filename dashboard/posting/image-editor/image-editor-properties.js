@@ -15,6 +15,7 @@
       const opacity = Math.round((target?.opacity ?? 1) * 100);
       document.getElementById('image-opacity-value').value = String(opacity);
       document.getElementById('image-opacity').value = String(opacity);
+      document.getElementById('image-opacity').style.setProperty('--image-opacity-progress', `${opacity}%`);
     }
     function commitDimensions() {
       const target = app.activeImage();
