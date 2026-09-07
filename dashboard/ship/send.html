@@ -912,11 +912,18 @@
         return ['received', 'completed', 'cancelled'].includes(status);
       },
 
+      hasDeliveryBooking(referenceId) {
+        return this.deliveryBookings.some(booking => booking.reference_id === referenceId);
+      },
+
       updateBadgeCounts() {
         // Keep the badge equivalent to the visible Send order list.
         const visibleBookings = this.bookings.filter(booking => {
           const items = this.visibleItemsForBooking(booking);
-          return !this.isHiddenOrderFamily(booking.order_no) && items.length && !this.isHiddenSendStatus(this.latestOrderStatus(booking, items));
+          return !this.isHiddenOrderFamily(booking.order_no)
+            && !this.hasDeliveryBooking(booking.order_no)
+            && items.length
+            && !this.isHiddenSendStatus(this.latestOrderStatus(booking, items));
         });
         const sendCount = new Set(visibleBookings.map(booking => booking.order_no).filter(Boolean)).size;
 
@@ -991,7 +998,11 @@
           group.items = this.visibleItemsForBooking(group.booking);
         });
 
-        const groupList = Object.values(groups).filter(group => group.items.length && !this.isHiddenSendStatus(this.latestOrderStatus(group.booking, group.items))).sort((a, b) => {
+        const groupList = Object.values(groups).filter(group => (
+          !this.hasDeliveryBooking(group.reference_id)
+          && group.items.length
+          && !this.isHiddenSendStatus(this.latestOrderStatus(group.booking, group.items))
+        )).sort((a, b) => {
           const bookingA = a.booking;
           const bookingB = b.booking;
           const pickupA = bookingA?.pickup_date || this.pickupSchedules[a.reference_id]?.date || '';
@@ -1744,6 +1755,7 @@
           preview.src = URL.createObjectURL(blob);
           preview.style.display = 'block';
           placeholder.style.display = 'none';
+          uploadBox.style.borderColor = 'var(--border)';
           
           this.cshipStopCamera();
           container.style.display = 'none';
@@ -1813,6 +1825,7 @@
         if (!file) return;
         
         this.cshipDelPhotoBlob = file;
+        document.getElementById('cship-del-upload-container').style.borderColor = 'var(--border)';
 
         const reader = new FileReader();
         reader.onload = function(evt) {
@@ -1875,6 +1888,17 @@
 
         if (skuRows.length === 0) {
           Toast.error('Please add at least one product SKU.');
+          return;
+        }
+
+        const baseFeeVal = parseFloat(document.getElementById('cship-base-fee').value) || 0;
+        const tollVal = parseFloat(document.getElementById('cship-toll').value) || 0;
+        const tip1Val = parseFloat(document.getElementById('cship-tip-1').value) || 0;
+        const tip2Val = parseFloat(document.getElementById('cship-tip-2').value) || 0;
+        const hasDeliveryDetails = this.cshipDelPhotoBlob || baseFeeVal > 0 || tollVal > 0 || tip1Val > 0 || tip2Val > 0;
+        if (!isReceive && hasDeliveryDetails && !this.cshipDelPhotoBlob) {
+          document.getElementById('cship-del-upload-container').style.borderColor = 'var(--danger)';
+          Toast.error('Upload the delivery information screenshot before adding delivery details.');
           return;
         }
 
@@ -1983,12 +2007,8 @@
               const uploadResultDel = await uploadResDel.json();
               deliveryPhotoUrl = uploadResultDel.url;
             }
+            if (!deliveryPhotoUrl) throw new Error('Delivery information upload failed');
           }
-
-          const baseFeeVal = parseFloat(document.getElementById('cship-base-fee').value) || 0;
-          const tollVal = parseFloat(document.getElementById('cship-toll').value) || 0;
-          const tip1Val = parseFloat(document.getElementById('cship-tip-1').value) || 0;
-          const tip2Val = parseFloat(document.getElementById('cship-tip-2').value) || 0;
 
           // Incoming shipments need a booking marker to appear directly in Warehouse Receive.
           // Send-out shipments use the same record for their delivery details.
@@ -2105,6 +2125,7 @@
 
         if (!uploadRes.ok) throw new Error('Delivery photo upload failed');
         const uploadResult = await uploadRes.json();
+        if (!uploadResult?.url) throw new Error('Delivery photo upload returned no image URL');
 
         const sb = window.BKAuth.sb;
 
