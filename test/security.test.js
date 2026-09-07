@@ -182,6 +182,9 @@ test('job-post employee registration creates default workspace access', () => {
   assert.match(registrationPage, /Home and Resources/);
   assert.match(registrationPage, /id="password"/);
   assert.match(registrationPage, /signInWithPassword/);
+  assert.match(registrationPage, /const selectedFiles = new Map\(\)/);
+  assert.match(registrationPage, /const files = Object\.fromEntries/);
+  assert.match(registrationPage, /Choose \$\{missingLabel\} before submitting\./);
 });
 
 test('all employee creation paths use the company-scoped employee number generator', () => {
