@@ -16,3 +16,8 @@ test('cancelled product lines are excluded from commission totals and display', 
   const cancelledLineGuards = source.match(/isCommissionLineCancelled\(b, sku, (?:i|index)\)/g) || [];
   assert.ok(cancelledLineGuards.length >= 3);
 });
+
+test('receipt actions fetch the latest company-scoped booking before rendering', () => {
+  assert.match(source, /window\.openViewReceiptById = async function\(bookingId\)[\s\S]*?window\.open\('', '_blank'\)[\s\S]*?from\('installation_bookings'\)[\s\S]*?\.eq\('company_id', currentCompanyId\)[\s\S]*?\.eq\('id', bookingId\)[\s\S]*?\.single\(\)/);
+  assert.doesNotMatch(source, /window\.openViewReceiptById = async function\(bookingId\) \{\s*const b = dbBookings\.find/);
+});
