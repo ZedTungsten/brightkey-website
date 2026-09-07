@@ -99,6 +99,7 @@
     const sb = window.supabase.createClient('https://ymjlosnxuhsybkzkoofq.supabase.co', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJ5bWpsb3NueHVoc3lia3prb29mcSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzc0NDA2NTM2LCJleHAiOjIwODk5ODI1MzZ9.srhk9SVvFuZRcfeRGbVDGPr5pYrFhs8vzcOiMK3A91w');
     let existingAccount = false;
     let registrationAccessToken = '';
+    const selectedFiles = new Map();
     const value = id => document.getElementById(id).value.trim();
     const payoutMode = () => document.querySelector('input[name="payout-mode"]:checked')?.value || 'account';
 
@@ -121,14 +122,18 @@
         const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file);
       });
     }
-    async function upload(id, uploadType, required) {
-      const file = document.getElementById(id).files[0];
-      if (!file) { if (required) throw new Error('Choose all required files before submitting.'); return null; }
+    async function upload(file, uploadType) {
+      if (!file) return null;
       const allowedTypes = uploadType === 'cv' ? ['application/pdf'] : ['image/jpeg', 'image/png', 'image/webp'];
       if (!allowedTypes.includes(file.type)) throw new Error(`${file.name} is not a supported file type.`);
       if (file.size > 3 * 1024 * 1024) throw new Error(`${file.name} is larger than 3 MB.`);
       return (await request({ action: 'upload', uploadType, fileName: file.name, fileBase64: await readFile(file) })).upload;
     }
+    document.querySelectorAll('input[type="file"]').forEach(input => input.addEventListener('change', () => {
+      const file = input.files?.[0] || null;
+      if (file) selectedFiles.set(input.id, file);
+      else selectedFiles.delete(input.id);
+    }));
     async function init() {
       const isLocalPreview = ['localhost', '127.0.0.1'].includes(location.hostname) && params.get('preview') === '1';
       if (isLocalPreview) {
@@ -176,6 +181,20 @@
       const confirmPassword = document.getElementById('confirm-password').value;
       if (!existingAccount && !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password)) return showAlert('Use at least 8 characters with uppercase, lowercase, a number, and a special character.');
       if (!existingAccount && password !== confirmPassword) return showAlert('The password confirmation does not match.');
+      const selectedPayoutMode = payoutMode();
+      const requiredFiles = [
+        ['profile', 'Profile Picture'],
+        ['govid', 'Government ID Image'],
+        ['cv', 'CV Attachment'],
+        ...(selectedPayoutMode === 'qr' ? [['payout-image', 'QR Code Image']] : [])
+      ];
+      const files = Object.fromEntries(requiredFiles.map(([id]) => [id, document.getElementById(id).files?.[0] || selectedFiles.get(id) || null]));
+      const missingFiles = requiredFiles.filter(([id]) => !files[id]);
+      if (missingFiles.length) {
+        const [missingId, missingLabel] = missingFiles[0];
+        document.getElementById(missingId).focus();
+        return showAlert(`Choose ${missingLabel} before submitting.`);
+      }
       submit.disabled = true; submit.textContent = 'Uploading and registering…';
       try {
         if (existingAccount) {
@@ -183,10 +202,9 @@
           if (loginError || !loginData?.session?.access_token) throw new Error('The current password is incorrect. Use your original BrightKey password or reset it from the login page.');
           registrationAccessToken = loginData.session.access_token;
         }
-        const selectedPayoutMode = payoutMode();
         const [profile, govid, cv, payout] = await Promise.all([
-          upload('profile', 'profile', true), upload('govid', 'govid', true), upload('cv', 'cv', true),
-          selectedPayoutMode === 'qr' ? upload('payout-image', 'payout', true) : Promise.resolve(null)
+          upload(files.profile, 'profile'), upload(files.govid, 'govid'), upload(files.cv, 'cv'),
+          selectedPayoutMode === 'qr' ? upload(files['payout-image'], 'payout') : Promise.resolve(null)
         ]);
         await request({ action: 'complete', uploads: { profile, govid, cv, payout }, fields: {
           middleName: value('middle-name'), dateOfBirth: value('date-of-birth'), city: value('city'), province: value('province'),
