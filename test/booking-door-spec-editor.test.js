@@ -7,6 +7,7 @@ const editor = fs.readFileSync(new URL('../dashboard/booking-schedules/door-spec
 const styles = fs.readFileSync(new URL('../dashboard/booking-schedules.css', import.meta.url), 'utf8');
 const page = fs.readFileSync(new URL('../dashboard/booking-schedules.html', import.meta.url), 'utf8');
 const assets = fs.readFileSync(new URL('../dashboard/booking-schedules/booking-assets.js', import.meta.url), 'utf8');
+const booking = fs.readFileSync(new URL('../dashboard/booking.html', import.meta.url), 'utf8');
 
 test('door type section uses one pencil action and three specification dropdowns', () => {
   assert.match(details, /id="door-spec-edit-button-\$\{i\}"[\s\S]*?aria-label="Edit door specifications"[\s\S]*?<svg/);
@@ -19,6 +20,11 @@ test('door type section uses one pencil action and three specification dropdowns
   assert.match(details, /\['Left swing', 'Right swing', 'Sliding', 'Barn Door', 'Double Doors'\]/);
   assert.match(details, />Save<\/button>/);
   assert.match(details, /toggleDoorSpecificationsEdit\(\$\{i\}, false\)[^>]*>Cancel<\/button>/);
+});
+
+test('booking and schedule editors both offer the double doors swing option', () => {
+  assert.match(booking, /<option value="Double Doors">Double Doors<\/option>/);
+  assert.match(details, /\['Left swing', 'Right swing', 'Sliding', 'Barn Door', 'Double Doors'\]/);
 });
 
 test('door specification save preserves the door object and scopes the update by company', () => {

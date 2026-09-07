@@ -249,8 +249,9 @@ test('workspace outside the canvas also uses open-hand drag panning', () => {
 });
 
 test('installer image browser lists only orders containing safe image uploads', () => {
-  assert.match(page, />Upload Image<\/label>/);
-  assert.match(page, /id="browse-installer-images"[\s\S]*>Browse Images<\/button>/);
+  assert.match(page, /id="image-source-trigger"[^>]*aria-haspopup="menu"[^>]*>Upload Image/);
+  assert.match(page, /id="upload-computer-image"[^>]*>Upload image from computer<\/button>/);
+  assert.match(page, /id="browse-installer-images"[^>]*>Browse image from operations<\/button>/);
   assert.match(page, /id="browse-images-search"[\s\S]*Search order number or customer name/);
   assert.match(page, /id="browse-image-orders"[\s\S]*id="browse-order-images"/);
   assert.match(mediaBrowser, /rpc\('get_posting_image_browser_bookings'/);
@@ -264,6 +265,7 @@ test('installer image browser lists only orders containing safe image uploads', 
 
 test('installer image browser uses month navigation and ten-order server pagination', () => {
   assert.match(page, /class="month-picker browse-month-picker"/);
+  assert.match(page, /class="browse-images-toolbar"[\s\S]*id="browse-images-search"[\s\S]*id="browse-month-label"[\s\S]*class="browse-images-layout"/);
   assert.match(page, /id="browse-month-previous"[\s\S]*id="browse-month-label"[\s\S]*id="browse-month-next"/);
   assert.match(page, /id="browse-orders-load-more"[\s\S]*>Load More<\/button>/);
   assert.match(mediaBrowser, /const PAGE_SIZE = 10/);
@@ -286,17 +288,42 @@ test('customer media handoff requires canvas selection before importing the imag
 });
 
 test('Resources picker imports multiple JPG and PNG files without edit actions', () => {
-  assert.match(page, /id="open-resources"[^>]*>Open Resources<\/button>/);
+  assert.match(page, /id="open-resources"[^>]*>Open resources folders<\/button>/);
   assert.match(page, /id="resources-picker-modal"[\s\S]*id="resources-search"[\s\S]*id="resources-folder-tree"[\s\S]*id="resources-picker-items"/);
   assert.match(page, /Cancel<\/button><button id="use-resource-images"[^>]*disabled>Use Image/);
   assert.doesNotMatch(resourcesBrowser, /card-dropdown|ellipsis|resources-edit/);
-  assert.match(resourcesBrowser, /\.select\('id,name,parent_id'\)[\s\S]*\.eq\('company_id',app\.state\.companyId\)[\s\S]*\.limit\(500\)/);
+  assert.match(resourcesBrowser, /\.select\('id,name,parent_id,folder_color'\)[\s\S]*\.eq\('company_id',app\.state\.companyId\)[\s\S]*\.limit\(500\)/);
   assert.match(resourcesBrowser, /\.select\('id,name,file_type,file_url,thumbnail_url,parent_id'\)[\s\S]*\.in\('file_type',IMAGE_TYPES\)[\s\S]*\.limit\(100\)/);
   assert.match(resourcesBrowser, /selected:new Map\(\)/);
   assert.match(resourcesBrowser, /await app\.addFiles\(await Promise\.all\(items\.slice\(0,available\)\.map\(resourceFile\)\)\)/);
   assert.match(resourcesBrowser, /\['image\/png','image\/jpeg'\]\.includes\(blob\.type\)/);
   assert.match(styles, /\.resources-image-check \{[^}]*opacity:0/);
   assert.match(styles, /\.resources-image-tile:hover \.resources-image-check/);
+});
+
+test('Resources folder tree shows root folders and progressively reveals deeper children', () => {
+  assert.match(resourcesBrowser, /expandedFolders:new Set\(\)/);
+  assert.match(resourcesBrowser, /state\.folders=data\|\|\[\];state\.expandedFolders\.add\(null\);renderTree\(\)/);
+  assert.match(resourcesBrowser, /function append\(parent,depth\)\{if\(!state\.expandedFolders\.has\(parent\)\)return;/);
+  assert.match(resourcesBrowser, /state\.expandedFolders\.clear\(\)/);
+  assert.match(styles, /\.resources-tree-item:not\(\.resources-tree-root\)::before \{[^}]*border-bottom:1px solid #D4D4D8;[^}]*border-left:1px solid #D4D4D8;/);
+});
+
+test('Resources picker applies saved folder colors in both columns', () => {
+  assert.match(resourcesBrowser, /const FOLDER_COLORS=\{cyan:\{background:'#ECFEFF',border:'#67E8F9'\}/);
+  assert.match(resourcesBrowser, /\.select\('id,name,parent_id,folder_color'\)/);
+  assert.match(resourcesBrowser, /function folderIcon\(folder\)[\s\S]*FOLDER_COLORS\[folder\.folder_color\][\s\S]*path\.setAttribute\('fill',color\?\.background\|\|'none'\)/);
+  assert.match(resourcesBrowser, /function folderButton\(folder,depth\)[\s\S]*button\.append\(folderIcon\(folder\)\)/);
+  assert.match(resourcesBrowser, /function folderTile\(folder\)[\s\S]*icon\.append\(folderIcon\(folder\)\)/);
+});
+
+test('Resources picker folder cards match the Resources page grid styling', () => {
+  assert.match(resourcesBrowser, /icon\.className='resources-folder-icon'/);
+  assert.match(resourcesBrowser, /name\.className='resources-folder-name'/);
+  assert.match(styles, /\.resources-folder-tile \{[^}]*min-height:140px;[^}]*padding:1rem \.5rem;[^}]*border-radius:12px;/);
+  assert.match(styles, /\.resources-folder-icon \{[^}]*width:48px;[^}]*height:48px;[^}]*margin-bottom:\.5rem;/);
+  assert.match(styles, /\.resources-folder-icon svg \{ width:32px; height:32px; \}/);
+  assert.match(styles, /\.resources-folder-name \{[^}]*font-size:\.78rem;[^}]*font-weight:500;/);
 });
 
 test('layers can be saved and loaded as an ordered reusable set above current layers', () => {

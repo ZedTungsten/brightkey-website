@@ -302,8 +302,7 @@
     document.getElementById('source-images').disabled = false;
     document.getElementById('browse-installer-images').disabled = false;
     document.getElementById('open-resources').disabled = false;
-    document.getElementById('upload-label').classList.remove('disabled');
-    document.getElementById('upload-label').setAttribute('aria-disabled', 'false');
+    document.getElementById('image-source-trigger').disabled = false;
     document.getElementById('fill-height').disabled = false;
     requestAnimationFrame(fillCanvasHeight);
   }
@@ -806,6 +805,7 @@
     projects.updateSaveButton();
     importHandoff.openPendingCanvasSetup(openSizeModal);
     if (typeof initNav === 'function') initNav();
+    window.BKImageEditorSourceMenu.bind();
     document.getElementById('source-images').addEventListener('change', event => uploadSources(event.target.files).catch(() => toast('One or more images could not be loaded.')));
     const layersList = document.getElementById('layers-list');
     layersList.addEventListener('dragstart', event => {

@@ -186,8 +186,11 @@
       min-height: 1.8rem;
       display: flex;
       align-items: center;
+      gap: 0.45rem;
       white-space: nowrap;
     }
+
+    .order-item-line .badge-status { margin-left: auto; }
 
     .order-quantity-line {
       justify-content: center;
@@ -206,11 +209,12 @@
       font-weight: 700;
       text-transform: capitalize;
     }
-    .badge-reserved { background: var(--cyan-dim); color: var(--cyan-light); border: 1px solid var(--cyan-border); }
+    .badge-reserved { background: #F97316; color: #FFFFFF; border: 1px solid #EA580C; }
     .badge-inspect { background: rgba(217,119,6,0.12); color: var(--warning); border: 1px solid rgba(217,119,6,0.25); }
-    .badge-packed { background: rgba(22,163,74,0.12); color: var(--success); border: 1px solid rgba(22,163,74,0.25); }
+    .badge-packed { background: var(--cyan); color: #FFFFFF; border: 1px solid var(--cyan-light); }
     .badge-dispatched { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border); }
-    .badge-cancelled { background: rgba(220,38,38,0.12); color: var(--danger); border: 1px solid rgba(220,38,38,0.25); }
+    .badge-received { background: #22C55E; color: #FFFFFF; border: 1px solid #16A34A; }
+    .badge-cancelled { background: #EF4444; color: #FFFFFF; border: 1px solid #DC2626; }
     .badge-returned { background: rgba(107,114,128,0.12); color: var(--text-secondary); border: 1px solid rgba(107,114,128,0.25); }
 
     /* ── Loader ── */
@@ -258,38 +262,53 @@
       text-decoration: underline;
     }
 
-    /* ── Month Navigator Styles ── */
-    .month-nav-container {
+    .orders-toolbar {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .orders-toolbar .bk-search-control { width: min(320px, 100%); }
+    .month-picker {
+      display: inline-flex;
+      flex-shrink: 0;
+      align-items: center;
       background: var(--bg-surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md, 8px);
-      padding: 0.5rem 1rem;
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
     }
-    .month-nav-btn {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text-primary);
-      width: 28px;
-      height: 28px;
-      border-radius: var(--radius-sm, 4px);
-      display: flex;
+    .month-picker button {
+      display: inline-flex;
+      width: 42px;
+      height: 42px;
       align-items: center;
       justify-content: center;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--text-secondary);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: background 0.15s, color 0.15s;
     }
-    .month-nav-btn:hover {
-      background: var(--bg-base);
-      border-color: var(--text-secondary);
+    .month-picker button:hover {
+      background: var(--bg-elevated);
+      color: var(--cyan);
     }
-    .month-display-label {
+    .month-picker svg { width: 18px; height: 18px; }
+    .month-picker-label {
+      min-width: 130px;
+      color: var(--text-muted);
       font-size: 0.9rem;
       font-weight: 700;
-      min-width: 120px;
       text-align: center;
+    }
+    @media (max-width: 640px) {
+      .orders-toolbar { align-items: stretch; flex-direction: column; }
+      .orders-toolbar .bk-search-control { width: 100%; }
+      .month-picker { width: 100%; justify-content: space-between; }
     }
   </style>
 </head>
@@ -332,15 +351,15 @@
             <div class="table-scroll">
               <!-- Tab Panel: All Orders -->
               <div class="tab-panel active" id="panel-all-orders">
-                <!-- Top controls row with Month Switcher -->
-                <div style="display: flex; justify-content: flex-start; align-items: center; margin-bottom: 1rem;">
-                  <div class="month-nav-container">
-                    <button onclick="changeMonth(-1)" class="month-nav-btn" aria-label="Previous month">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <div class="orders-toolbar">
+                  <input type="search" class="bk-search-control" id="search-customer" oninput="renderAllOrdersTab()" placeholder="Search customer or order number" />
+                  <div class="month-picker">
+                    <button onclick="changeMonth(-1)" type="button" aria-label="Previous month">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
                     </button>
-                    <span class="month-display-label" id="month-label">---</span>
-                    <button onclick="changeMonth(1)" class="month-nav-btn" aria-label="Next month">
-                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    <span class="month-picker-label" id="month-label">---</span>
+                    <button onclick="changeMonth(1)" type="button" aria-label="Next month">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </button>
                   </div>
                 </div>
@@ -348,11 +367,8 @@
                 <div class="panel">
                   <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
                     <span>All Orders &amp; Movements</span>
-                    <div style="display:flex; align-items:center; gap:0.75rem;">
-                      <input type="search" class="bk-search-control" id="search-customer" oninput="renderAllOrdersTab()" placeholder="Search Customer..." style="font-size:0.82rem; width:180px;" />
-                      <div id="bulk-edit-container">
-                        <button class="btn btn-outline btn-sm" onclick="enterBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Bulk Edit</button>
-                      </div>
+                    <div id="bulk-edit-container">
+                      <button class="btn btn-outline btn-sm" onclick="enterBulkEditMode()" style="height:32px; font-size:0.8rem; font-weight:600; cursor:pointer; background:var(--bg-surface); border:1px solid var(--border); border-radius:6px; padding:0 0.75rem; color:var(--text-secondary);">Bulk Edit</button>
                     </div>
                   </div>
                   <div class="table-responsive">
@@ -612,7 +628,7 @@
     function updateMonthLabel() {
       const labelEl = document.getElementById('month-label');
       if (labelEl) {
-        labelEl.textContent = currentDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        labelEl.textContent = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       }
     }
 
@@ -761,7 +777,7 @@
 
       const installQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, customer_address, customer_phone, status')
+          .select('order_no, scheduled_date, customer_address, customer_phone, status, products')
           .eq('company_id', companyId)
           .gte('created_at', monthStart)
           .lt('created_at', monthEnd)
@@ -944,9 +960,49 @@
       });
 
       tbody.innerHTML = consolidatedList.map(group => {
-        const t = group.items[0]; // representative transaction
-        const installationBooking = dbInstallationBookings.find(booking => booking.order_no === t.reference_id);
-        const isCancelledOrder = installationBooking?.status === 'cancelled' || group.items.every(item => item.status === 'cancelled');
+        const installationBooking = dbInstallationBookings.find(booking => booking.order_no === group.reference_id);
+        const cancelledQuantityBySku = new Map();
+        (installationBooking?.products || []).forEach(product => {
+          if (product?.cancelled !== true) return;
+          const sku = String(product.sku || '').trim().toUpperCase();
+          cancelledQuantityBySku.set(sku, (cancelledQuantityBySku.get(sku) || 0) + Math.max(1, Number(product.qty) || 1));
+        });
+        const cancelledItemIds = new Set();
+        group.items.forEach(item => {
+          if (!item.timestamp_cancelled) return;
+          cancelledItemIds.add(item.id);
+          const sku = String(item.sku || '').trim().toUpperCase();
+          cancelledQuantityBySku.set(sku, Math.max(0, (cancelledQuantityBySku.get(sku) || 0) - Math.max(1, Number(item.quantity) || 1)));
+        });
+        group.items.forEach(item => {
+          if (cancelledItemIds.has(item.id)) return;
+          const sku = String(item.sku || '').trim().toUpperCase();
+          const remaining = cancelledQuantityBySku.get(sku) || 0;
+          if (remaining <= 0) return;
+          cancelledItemIds.add(item.id);
+          cancelledQuantityBySku.set(sku, Math.max(0, remaining - Math.max(1, Number(item.quantity) || 1)));
+        });
+        if (installationBooking?.status === 'cancelled' && !(installationBooking.products || []).some(product => product?.cancelled === true)) {
+          group.items.filter(item => item.status === 'cancelled').forEach(item => cancelledItemIds.add(item.id));
+        }
+        const workflowStatus = item => {
+          if (item.timestamp_received) return 'received';
+          if (item.timestamp_dispatched) return 'dispatched';
+          if (item.timestamp_packed) return 'packed';
+          if (item.timestamp_inspect) return 'inspect';
+          if (item.timestamp_reserved) return 'reserved';
+          return item.status === 'cancelled' ? 'reserved' : item.status;
+        };
+        const statusRank = { reserved: 0, inspect: 1, packed: 2, dispatched: 3, received: 4, returned: 5 };
+        const activeItems = group.items.filter(item => !cancelledItemIds.has(item.id));
+        const t = activeItems.length
+          ? [...activeItems].sort((a, b) => (statusRank[workflowStatus(a)] ?? 99) - (statusRank[workflowStatus(b)] ?? 99))[0]
+          : group.items[0];
+        const isCancelledOrder = activeItems.length === 0;
+        const orderStatus = isCancelledOrder ? 'cancelled' : workflowStatus(t);
+        const orderStatusLabel = orderStatus === 'reserved'
+          ? 'For Packing'
+          : String(orderStatus || 'reserved').replace(/_/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
         const dateCreated = t.created_at ? new Date(t.created_at).toLocaleString() : '—';
         
         // Show proper supplier PO or reference if no customer name exists
@@ -969,7 +1025,7 @@
         if (!city) city = '—';
 
         // Stack SKUs and quantities on their own line per item
-        const skusHtml = group.items.map(item => `<div class="order-item-line"><code>${escFulfillment(item.sku || '—')}</code></div>`).join('');
+        const skusHtml = group.items.map(item => `<div class="order-item-line"><code>${escFulfillment(item.sku || '—')}</code>${cancelledItemIds.has(item.id) ? '<span class="badge-status badge-cancelled">Cancelled</span>' : ''}</div>`).join('');
         const quantitiesHtml = group.items.map(item => `<div class="order-item-line order-quantity-line"><strong>${item.quantity || 0}</strong></div>`).join('');
 
         const tsReserved = t.timestamp_reserved ? new Date(t.timestamp_reserved).toLocaleString() : '—';
@@ -980,7 +1036,7 @@
 
         const statsHtml = `
           <div style="font-size: 0.72rem; line-height: 1.45; color:var(--text-secondary);">
-            ${isCancelledOrder ? '<div style="margin-bottom:0.3rem;"><span class="badge badge-cancelled">Cancelled</span></div>' : ''}
+            <div style="margin-bottom:0.3rem;"><span class="badge-status badge-${escFulfillment(orderStatus || 'reserved')}">${escFulfillment(orderStatusLabel)}</span></div>
             <div><strong>Booked:</strong> ${tsReserved}</div>
             <div><strong>Inspected:</strong> ${tsInspect}</div>
             <div><strong>Packed:</strong> ${tsPacked}</div>
