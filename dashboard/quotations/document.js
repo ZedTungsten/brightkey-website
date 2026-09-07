@@ -1,8 +1,8 @@
 'use strict';
 
 (function quotationDocument() {
-  const FIELD_IDS = ['quotation-logo-size','quotation-brand-alignment','quotation-subheader','quotation-title','quotation-font-family','quotation-font-weight','quotation-title-font-size','quotation-number','prepared-company','prepared-address','prepared-contact','project-client-name','project-client-address','project-scope'];
-  const DEFAULTS = { 'quotation-logo-size':'small', 'quotation-brand-alignment':'left', 'quotation-subheader':'', 'quotation-title':'Supply and Installation Quotation', 'quotation-font-family':'commissioner', 'quotation-font-weight':'700', 'quotation-title-font-size':'32', 'quotation-number':'', 'prepared-company':'', 'prepared-address':'', 'prepared-contact':'', 'project-client-name':'', 'project-client-address':'', 'project-scope':'' };
+  const FIELD_IDS = ['quotation-logo-size','quotation-brand-alignment','quotation-subheader','quotation-title','quotation-font-family','quotation-font-weight','quotation-title-font-size','prepared-company','prepared-address','prepared-contact','project-client-name','project-client-address','project-scope'];
+  const DEFAULTS = { 'quotation-logo-size':'small', 'quotation-brand-alignment':'left', 'quotation-subheader':'', 'quotation-title':'Supply and Installation Quotation', 'quotation-font-family':'commissioner', 'quotation-font-weight':'700', 'quotation-title-font-size':'32', 'prepared-company':'', 'prepared-address':'', 'prepared-contact':'', 'project-client-name':'', 'project-client-address':'', 'project-scope':'' };
   const OPTIONS = { 'quotation-logo-size':['small','medium'], 'quotation-brand-alignment':['left','center'], 'quotation-font-family':['times','montserrat','commissioner'], 'quotation-font-weight':['400','500','600','700'], 'quotation-title-font-size':['24','32','40'] };
 
   function validate(document) {
@@ -28,5 +28,15 @@
     return validate({ version:1, date, branding:{ companyName:String(branding.companyName || ''), logoDark:String(branding.logoDark || '') }, pages:[{ type:'cover', fields }] });
   }
 
-  window.BKQuotationDocument = { FIELD_IDS, DEFAULTS, capture, validate };
+  function nextQuotationNumber(date, latestNumber = '') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date));
+    if (!match) throw new Error('Invalid quotation date.');
+    const prefix = `${match[2]}${match[3]}${match[1].slice(-2)}`;
+    const latestMatch = new RegExp(`^${prefix}-(\\d{4})$`).exec(String(latestNumber));
+    const sequence = latestMatch ? Number(latestMatch[1]) + 1 : 0;
+    if (sequence > 9999) throw new Error('Daily quotation number limit reached.');
+    return `${prefix}-${String(sequence).padStart(4, '0')}`;
+  }
+
+  window.BKQuotationDocument = { FIELD_IDS, DEFAULTS, capture, validate, nextQuotationNumber };
 })();

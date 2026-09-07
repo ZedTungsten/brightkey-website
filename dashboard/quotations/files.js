@@ -4,7 +4,7 @@
   const PAGE_SIZE = 50;
   const byId = id => document.getElementById(id);
 
-  function init({ sb, companyId, capture, restore, toast }) {
+  async function init({ sb, companyId, capture, restore, setQuotationNumber, toast }) {
     if (!companyId || companyId === 'undefined' || companyId === 'null') return;
     const cache = new Map(); // This instance belongs to one authenticated company/page lifecycle.
     let modal = null;
@@ -13,6 +13,14 @@
     let page = 0;
     let selectedId = null;
     let fileName = '';
+
+    async function loadNextQuotationNumber() {
+      const date = new Intl.DateTimeFormat('en-CA', { timeZone:'Asia/Manila', year:'numeric', month:'2-digit', day:'2-digit' }).format(new Date());
+      const prefix = window.BKQuotationDocument.nextQuotationNumber(date).slice(0, 6);
+      const { data, error } = await sb.from('quotations').select('quotation_number').eq('company_id', companyId).like('quotation_number', `${prefix}-%`).order('quotation_number', { ascending:false }).limit(1).maybeSingle();
+      if (error) throw error;
+      setQuotationNumber(window.BKQuotationDocument.nextQuotationNumber(date, data?.quotation_number));
+    }
 
     function open(id, trigger) {
       if (modal) return;
@@ -137,9 +145,10 @@
       byId('quotation-confirm-save').textContent = 'Saving...';
       try {
         const snapshot = capture();
-        const { error } = await sb.from('quotations').insert({ company_id:companyId, file_name:name, snapshot });
-        if (error) throw error;
+        const { data, error } = await sb.from('quotations').insert({ company_id:companyId, file_name:name, snapshot }).select('id,quotation_number').single();
+        if (error || !data?.quotation_number) throw error || new Error('Quotation number was not generated.');
         fileName = name;
+        setQuotationNumber(data.quotation_number);
         cache.clear();
         setBusy(false); close();
         toast('Quotation saved.');
@@ -152,11 +161,12 @@
       setBusy(true);
       byId('quotation-confirm-load').textContent = 'Loading...';
       try {
-        const { data, error } = await sb.from('quotations').select('id,file_name,snapshot').eq('company_id', companyId).eq('id', selectedId).single();
+        const { data, error } = await sb.from('quotations').select('id,file_name,quotation_number,snapshot').eq('company_id', companyId).eq('id', selectedId).single();
         if (error || !data) throw error || new Error('Quotation unavailable.');
         // Validate the entire snapshot before touching any of the current fields.
         const snapshot = window.BKQuotationDocument.validate(data.snapshot);
         restore(snapshot);
+        setQuotationNumber(data.quotation_number);
         fileName = data.file_name;
         setBusy(false); close(); toast('Quotation loaded.');
       } catch (_) {
@@ -181,6 +191,11 @@
     });
     byId('quotation-open-save').disabled = false;
     byId('quotation-open-load').disabled = false;
+    await loadNextQuotationNumber().catch(error => {
+      console.error('Unable to load the next quotation number:', error);
+      setQuotationNumber('');
+      toast('The quotation number preview could not be loaded.', 'error');
+    });
   }
 
   window.BKQuotationFiles = { init };
