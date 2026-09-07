@@ -611,13 +611,12 @@
             .select('*')
             .eq('company_id', this.companyId)
             .in('type', ['customer_order', 'supplier_order'])
-            .in('status', ['packed', 'reserved', 'inspect', 'ordered'])
             .range(0, 499);
           if (txErr) throw txErr;
           this.activeTransactions = txs || [];
 
           const { data: bData, error: bErr } = await sb.from('installation_bookings')
-            .select('order_no, scheduled_date, customer_address, customer_phone')
+            .select('order_no, status, product_skus, product_qtys, scheduled_date, customer_address, customer_phone')
             .eq('company_id', this.companyId);
           if (bErr) throw bErr;
           this.bookings = bData || [];
@@ -631,7 +630,7 @@
           this.deliveryBookings = dbData || [];
 
           const { data: pData, error: pErr } = await sb.from('products')
-            .select('id, sku, title')
+            .select('id, sku, title, category')
             .or(`company_id.eq.${this.companyId},company_id.is.null`)
             .order('sku');
           if (pErr) throw pErr;
@@ -665,24 +664,30 @@
       },
 
       updateBadgeCounts() {
-        // 1. Calculate Send Count
-        const sendQueue = this.activeTransactions.filter(t => {
-          if (t.type !== 'customer_order') return false;
-          if (t.status !== 'packed') return false;
-          if (t.reference_id && t.reference_id.startsWith('RCV-')) return false;
-          const isBooked = this.deliveryBookings.some(db => db.reference_id === t.reference_id);
-          if (isBooked) return false;
+        // Keep the badge equivalent to the visible Send order list.
+        const hiddenStatuses = new Set(['received', 'completed', 'cancelled']);
+        const serviceSkus = new Set(this.allProducts
+          .filter(product => String(product.category || '').trim().toLowerCase() === 'service')
+          .map(product => String(product.sku || '').trim().toUpperCase()));
+        const visibleBookings = this.bookings.filter(booking => {
+          const orderNo = String(booking.order_no || '').trim();
+          if (!orderNo || orderNo.startsWith('OC-') || orderNo.startsWith('DO-')) return false;
+          if (this.deliveryBookings.some(deliveryBooking => deliveryBooking.reference_id === orderNo)) return false;
 
-          if (t.reference_id) {
-            const hasUnpacked = this.activeTransactions.some(other => 
-              other.reference_id === t.reference_id && 
-              ['reserved', 'inspect'].includes(other.status)
-            );
-            if (hasUnpacked) return false;
+          let items = this.activeTransactions.filter(item => item.reference_id === orderNo);
+          if (!items.length) {
+            const skus = String(booking.product_skus || '').split('|').map(value => value.trim()).filter(Boolean);
+            const qtys = String(booking.product_qtys || '').split('|').map(value => Number(value.trim()) || 0);
+            items = skus.map((sku, index) => ({ sku, quantity: qtys[index] || 0, status: booking.status || 'scheduled' }));
           }
-          return true;
+          items = items.filter(item => item.status !== 'cancelled' && !serviceSkus.has(String(item.sku || '').trim().toUpperCase()));
+          if (!items.length) return false;
+
+          const ranks = { scheduled: 0, confirmed: 1, ordered: 2, reserved: 3, inspect: 4, packed: 5, dispatched: 6, in_progress: 7, received: 8, completed: 9, returned: 10, cancelled: 11 };
+          const latestStatus = items.reduce((latest, item) => (ranks[item.status] ?? -1) > (ranks[latest] ?? -1) ? item.status : latest, booking.status || 'scheduled');
+          return !hiddenStatuses.has(latestStatus);
         });
-        const sendCount = [...new Set(sendQueue.map(t => t.reference_id))].length;
+        const sendCount = new Set(visibleBookings.map(booking => booking.order_no).filter(Boolean)).size;
 
         // 2. Calculate Receive Count
         const receiveQueue = this.activeTransactions.filter(t => {

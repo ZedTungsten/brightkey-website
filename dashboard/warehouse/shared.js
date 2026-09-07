@@ -260,7 +260,7 @@ window.WarehousePage = {
             : Number(row.dispatch_count || 0);
           renderBadges(
             Number(row.receive_count || 0),
-            document.getElementById('pack-list') ? getPackCount() : Number(row.pack_count || 0),
+            getPackCount(),
             dispatchCount
           );
           return;
