@@ -574,6 +574,22 @@ This means the typical approach of adding `border-right` and `box-shadow` to a s
   }
   ```
 
+### 15.1 Range Slider Track Colors
+
+All range sliders must use the same track color contract across supported
+browsers:
+
+- The completed portion of the track is `var(--cyan)`.
+- The unfilled portion of the track is light gray `#E4E4E7`. Do not use the
+  browser's native dark gray track.
+- The slider thumb/handle is `var(--cyan)`.
+- Style both WebKit and Firefox range pseudo-elements explicitly. When the
+  browser does not provide a progress pseudo-element, update a CSS custom
+  property from the input value and use it in a two-color linear gradient.
+
+For rotated vertical sliders, the cyan portion remains below the handle and the
+light-gray portion remains above it.
+
 ---
 
 ## 16. Modal Overlay Activation (Opacity & Transitions)
@@ -690,6 +706,62 @@ For a compact or dynamically generated search input:
 ```html
 <input class="bk-search-control" type="search" placeholder="Search..." />
 ```
+
+> [!IMPORTANT]
+> `.bk-search-control` already supplies its magnifying-glass SVG as a background
+> image, including the correct spacing and focus treatment. Never place an
+> additional inline SVG, pseudo-element icon, background icon, or text glyph
+> beside or inside an input using this class; doing so creates a doubled search
+> icon. Use the input by itself exactly as shown above.
+
+### 19.1 Saved-File Chooser Modals
+
+Saved-file chooser modals use one consistent selection and search layout:
+
+- The modal title and top-right X occupy the header. Do not add an instructional
+  subtitle when the search and selection controls make the purpose clear.
+- Put the standalone `.bk-search-control` search input on the left side of the
+  toolbar directly below the header. Do not add another magnifying-glass SVG.
+- Put the selection summary and cyan text actions on the toolbar's right side.
+  Hide the selected-file count when it is zero. Show `Selected file: 1` for one
+  item and `Selected files: N` for multiple items.
+- Keep `Select All` visible and cyan; it selects the files currently visible
+  after search filtering. Show cyan `Deselect All` only when at least one file
+  is selected. Searching must not silently clear checked selections.
+- Put a checkbox immediately left of each saved-file thumbnail. Keep it visually
+  hidden until its row is hovered, keyboard-focused, or selected. Clicking
+  elsewhere on the row toggles the same checkbox. Selected rows use the standard
+  subtle cyan background.
+- Keep the cyan Load action at the right side of every row so loading remains a
+  direct single-file action. Do not put Load in the footer.
+- Put a gray pencil SVG immediately left of the row's Load action and reveal it
+  only when the row is hovered or the control receives keyboard focus. Clicking
+  it replaces the displayed filename with a prefilled inline text field. While
+  renaming, replace both the pencil and Load controls with a red X SVG to cancel
+  and a green check SVG to apply; do not open a separate rename modal.
+- Remove row-level Delete and Duplicate actions. When one or more files are
+  selected, enable the footer's Duplicate and red Delete actions. Keep the
+  footer and both actions visible when nothing is selected, but disable them
+  with the standard washed-out white-overlay treatment and block pointer input.
+- The footer contains actions only; it does not contain a Close button. The
+  top-right X is the modal's explicit close control.
+- Duplicating a saved file must copy its stored assets rather than sharing
+  deletable storage paths. Names progress as `File (copy 1)`, `File (copy 2)`,
+  and so on.
+- When Save Document would create a second saved file with the same exact name
+  in the current company, show a custom `Overwrite file?` confirmation before
+  uploading or changing data. Use an unfilled neutral Cancel action and a green
+  Overwrite action. Overwriting replaces that saved document while keeping its
+  storage assets independent from any other project; never use a native browser
+  dialog. Saving the currently loaded document back to its own record does not
+  require this confirmation.
+- When a user tries to load another saved file while the current canvas is dirty,
+  require a custom `Save changes?` checkpoint with neutral `Discard Changes` and
+  green `Save Changes` actions. Saving updates the currently loaded document
+  directly and must not trigger the duplicate-name overwrite prompt; after a
+  successful save, continue loading the requested file. If the canvas has never
+  been saved, use the normal Save Document naming flow before continuing. Do not
+  allow backdrop clicks or Escape to silently dismiss this decision modal.
 
 ---
 
