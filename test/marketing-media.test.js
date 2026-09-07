@@ -58,3 +58,12 @@ test('Shared Media permits Marketing or Sales modules without granting Operation
   assert.doesNotMatch(script, /checkRoleGate\([^\n]*'Operations'/);
   assert.doesNotMatch(productsScript, /checkRoleGate\([^\n]*'Operations'/);
 });
+
+test('customer image viewer hands the selected safe image to Image Editor', () => {
+  assert.match(html, /id="media-image-title">Image Preview<[\s\S]*id="media-image-open-editor"[\s\S]*>Open in Editor</);
+  assert.match(styles, /\.media-image-card \.media-video-header \{[\s\S]*grid-template-columns: 1fr auto 1fr/);
+  assert.match(script, /state\.previewImageUrl = url/);
+  assert.match(script, /SAFE_MEDIA_PATTERN\.test\(state\.previewImageUrl\)/);
+  assert.match(script, /sessionStorage\.setItem\(IMAGE_EDITOR_HANDOFF_KEY/);
+  assert.match(script, /window\.location\.assign\('\/dashboard\/posting\/image-editor'\)/);
+});

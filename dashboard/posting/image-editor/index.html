@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
-  <link rel="stylesheet" href="/dashboard/posting/image-editor/image-editor.css?v=20260907-4" />
+  <link rel="stylesheet" href="/dashboard/posting/image-editor/image-editor.css?v=20260907-resources-picker" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 </head>
 <body class="posting-page">
@@ -25,12 +25,14 @@
           <div class="layers-list" id="layers-list" aria-label="Image layers">
             <p class="layers-empty">Uploaded images will appear here.</p>
           </div>
+          <footer class="layer-set-actions" aria-label="Layer set actions"><button id="load-layer-set" type="button" aria-label="Load saved layers" title="Load saved layers"><svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 21h14"></path></svg></button><button id="save-layer-set" type="button" aria-label="Save current layers" title="Save current layers" disabled><svg viewBox="0 0 24 24"><path d="M5 21h14a2 2 0 0 0 2-2V7l-4-4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2Z"></path><path d="M7 3v6h10V3M8 21v-7h8v7"></path></svg></button></footer>
         </aside>
         <section class="editor-workspace" aria-label="Image canvas editor">
           <div class="editor-toolbar">
             <label id="upload-label" class="btn btn-primary upload-button disabled" for="source-images" aria-disabled="true">Upload Image</label>
             <input id="source-images" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif" multiple hidden disabled />
             <button id="browse-installer-images" class="btn btn-outline" type="button" disabled>Browse Images</button>
+            <button id="open-resources" class="btn btn-outline" type="button" disabled>Open Resources</button>
             <button id="fill-height" class="btn btn-outline" type="button" disabled>Fill height</button>
           </div>
 
@@ -146,6 +148,9 @@
     </div>
   </div>
 
+  <div class="editor-modal" id="save-layer-set-modal" aria-hidden="true"><div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="save-layer-set-title"><header><h2 id="save-layer-set-title">Save Layers</h2><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header><div class="modal-content"><label class="editor-field" for="layer-set-name"><span>Filename <span class="required">*</span></span><input id="layer-set-name" type="text" maxlength="120" autocomplete="off" /></label><p class="field-error" id="layer-set-name-error" hidden>Enter a filename.</p></div><footer><button class="btn btn-outline" type="button" data-close-modal>Cancel</button><button id="confirm-save-layer-set" class="btn btn-cyan" type="button">Save Layers</button></footer></div></div>
+  <div class="editor-modal" id="load-layer-set-modal" aria-hidden="true"><div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="load-layer-set-title"><header><h2 id="load-layer-set-title">Load Layers</h2><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header><div class="modal-content"><div id="layer-set-list" class="size-saved-list"><div class="size-saved-state"><span class="spinner-cyan"></span><span>Loading saved layers...</span></div></div></div></div></div>
+
   <div class="editor-modal" id="overwrite-document-modal" aria-hidden="true">
     <div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="overwrite-document-title">
       <header><div><h2 id="overwrite-document-title">Overwrite file?</h2><p>A saved file already uses this name.</p></div><button class="modal-close" type="button" data-close-modal data-cancel-overwrite aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header>
@@ -166,11 +171,20 @@
   <div class="editor-modal" id="browse-images-modal" aria-hidden="true">
     <div class="editor-modal-card browse-images-modal-card" role="dialog" aria-modal="true" aria-labelledby="browse-images-title">
       <header><div><h2 id="browse-images-title">Browse Images</h2><p>Select from installer-uploaded media.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header>
-      <div class="browse-images-toolbar"><label class="saved-canvases-search" for="browse-images-search"><input id="browse-images-search" class="bk-search-control" type="search" placeholder="Search customer name, order number, or date" autocomplete="off" /></label></div>
-      <div class="browse-images-layout"><div class="browse-orders" id="browse-image-orders" aria-label="Orders with installer images"></div><div class="browse-media" id="browse-order-images" aria-label="Installer images for selected order"></div></div>
+      <div class="browse-images-toolbar"><label class="saved-canvases-search" for="browse-images-search"><input id="browse-images-search" class="bk-search-control" type="search" placeholder="Search order number or customer name" autocomplete="off" /></label></div>
+      <div class="browse-images-layout">
+        <div class="browse-orders-panel">
+          <div class="month-picker browse-month-picker"><button id="browse-month-previous" type="button" aria-label="Previous month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg></button><span id="browse-month-label">September 2026</span><button id="browse-month-next" type="button" aria-label="Next month"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"></path></svg></button></div>
+          <div class="browse-orders" id="browse-image-orders" aria-label="Orders with installer images"></div>
+          <button id="browse-orders-load-more" class="browse-orders-load-more" type="button" hidden>Load More</button>
+        </div>
+        <div class="browse-media" id="browse-order-images" aria-label="Installer images for selected order"></div>
+      </div>
       <footer><span id="browse-images-selected-count" class="browse-selected-count">No images selected</span><button class="btn btn-outline" type="button" data-close-modal>Cancel</button><button id="add-browsed-images" class="btn btn-cyan" type="button" disabled>Add Images</button></footer>
     </div>
   </div>
+
+  <div class="editor-modal" id="resources-picker-modal" aria-hidden="true"><div class="editor-modal-card resources-picker-card" role="dialog" aria-modal="true" aria-labelledby="resources-picker-title"><header><div><h2 id="resources-picker-title">Open Resources</h2><p>Select JPG or PNG files to add to the canvas.</p></div><button class="modal-close" type="button" data-close-modal aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"></path></svg></button></header><div class="resources-picker-toolbar"><label class="saved-canvases-search" for="resources-search"><input id="resources-search" class="bk-search-control" type="search" placeholder="Search image files" autocomplete="off" /></label></div><div class="resources-picker-layout"><nav id="resources-folder-tree" class="resources-folder-tree" aria-label="Resource folders"></nav><div id="resources-picker-items" class="resources-picker-items" aria-label="Resource files and folders"></div></div><footer><span id="resources-selected-count" class="browse-selected-count">No images selected</span><button class="btn btn-outline" type="button" data-close-modal>Cancel</button><button id="use-resource-images" class="btn btn-cyan" type="button" disabled>Use Image</button></footer></div></div>
 
   <div class="editor-modal" id="delete-document-modal" aria-hidden="true">
     <div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="delete-document-title">
@@ -190,9 +204,9 @@
 
   <div class="editor-modal" id="unsaved-changes-overlay" aria-hidden="true">
     <div class="editor-modal-card editor-modal-small" role="dialog" aria-modal="true" aria-labelledby="unsaved-changes-title">
-      <header><div><h2 id="unsaved-changes-title">Unsaved Changes</h2><p>Your canvas has changes that have not been saved.</p></div></header>
+      <header><div><h2 id="unsaved-changes-title">Unsaved Changes</h2></div></header>
       <div class="modal-content"><p class="unsaved-message">Save your canvas before leaving this page.</p></div>
-      <footer><button class="btn btn-outline" id="unsaved-changes-cancel" type="button">Cancel</button><button class="btn btn-success" id="unsaved-changes-save" type="button">Save Changes</button></footer>
+      <footer><button class="btn btn-outline" id="unsaved-changes-cancel" type="button">Cancel</button><button class="btn btn-outline" id="unsaved-changes-discard" type="button">Don't Save</button><button class="btn btn-success" id="unsaved-changes-save" type="button">Save Changes</button></footer>
     </div>
   </div>
 
@@ -200,14 +214,16 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
   <script src="/js/auth.js"></script>
-  <script src="/js/sidebar.js"></script>
+  <script src="/js/sidebar.js?v=20260907-posting-sales"></script>
   <script src="/js/main.js"></script>
-  <script src="/dashboard/posting/image-editor/image-editor-projects.js?v=20260906-13"></script>
-  <script src="/dashboard/posting/image-editor/image-editor-unsaved-guard.js?v=20260901-4"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-projects.js?v=20260907-layer-direct-upload"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-unsaved-guard.js?v=20260907-5"></script>
   <script src="/dashboard/posting/image-editor/image-editor-effects.js?v=20260907-4"></script>
-  <script src="/dashboard/posting/image-editor/image-editor-properties.js?v=20260906-1"></script>
-  <script src="/dashboard/posting/image-editor/image-editor-media-browser.js?v=20260907-1"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-properties.js?v=20260907-slider-track"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-media-browser.js?v=20260907-3"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-resources.js?v=20260907-1"></script>
   <script src="/dashboard/posting/image-editor/image-editor-stage-pan.js?v=20260907-1"></script>
-  <script src="/dashboard/posting/image-editor/image-editor.js?v=20260907-1"></script>
+  <script src="/dashboard/posting/image-editor/image-editor-selection.js?v=20260907-1"></script>
+  <script src="/dashboard/posting/image-editor/image-editor.js?v=20260907-resources-picker"></script>
 </body>
 </html>

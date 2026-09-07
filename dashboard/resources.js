@@ -1532,13 +1532,13 @@ window.saveFile = async function() {
        let uploadName = file.name;
        let fileType = 'doc';
 
-       if (['png', 'jpg', 'jpeg'].includes(ext)) {
+       if (['jpg', 'jpeg'].includes(ext)) {
          btn.textContent = "Compressing Image...";
          fileToUpload = await compressUploadedImage(file, 1600, 0.8);
          uploadName = fileToUpload.name;
-         // Force fileType to 'jpg' since compression pipeline converts PNGs/JPGs to 'image/jpeg'
          fileType = 'jpg';
-       } else if (ext === 'pdf') {
+       } else if (ext === 'png') fileType = 'png';
+       else if (ext === 'pdf') {
          fileType = 'pdf';
        }
 
@@ -1564,7 +1564,7 @@ window.saveFile = async function() {
       if (['png', 'jpg', 'jpeg'].includes(ext)) {
         try {
           const thumbBlob = await generateImageThumbnail(fileToUpload);
-          const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.jpg`;
+          const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.${thumbBlob.type === 'image/png' ? 'png' : 'jpg'}`;
           await window.BKAuth.checkStorageQuota(currentCompanyId, thumbBlob);
           const { data: tData, error: tErr } = await sb.storage
             .from('brightkey-assets')
@@ -1728,11 +1728,11 @@ async function autoUploadFile(file) {
   let fileToUpload = file;
   let uploadName = file.name;
 
-  if (['png', 'jpg', 'jpeg'].includes(ext)) {
+  if (['jpg', 'jpeg'].includes(ext)) {
     fileToUpload = await compressUploadedImage(file, 1600, 0.8);
     uploadName = fileToUpload.name;
     fileType = 'jpg';
-  }
+  } else if (ext === 'png') fileType = 'png';
 
   try {
     await window.BKAuth.checkStorageQuota(currentCompanyId, fileToUpload);
@@ -1755,7 +1755,7 @@ async function autoUploadFile(file) {
     if (['png', 'jpg', 'jpeg'].includes(ext)) {
       try {
         const thumbBlob = await generateImageThumbnail(fileToUpload);
-        const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.jpg`;
+        const thumbPath = `companies/${currentCompanyId}/sales-resources/thumbs/${Date.now()}_thumb_${uploadName.replace(/\.[^/.]+$/, "")}.${thumbBlob.type === 'image/png' ? 'png' : 'jpg'}`;
         await window.BKAuth.checkStorageQuota(currentCompanyId, thumbBlob);
         const { data: tData, error: tErr } = await sb.storage
           .from('brightkey-assets')
@@ -2163,7 +2163,7 @@ window.switchSheetTab = function(btn, tabIndex) {
   showToast(`Switched spreadsheet view to Tab ${tabIndex}`);
 };
 
-// Client-side canvas utility to generate a 200px width compressed image thumbnail blob
+// Client-side canvas utility to generate a 200px image thumbnail without discarding PNG transparency.
 async function generateImageThumbnail(file) {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -2179,7 +2179,7 @@ async function generateImageThumbnail(file) {
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         canvas.toBlob((blob) => {
           resolve(blob);
-        }, 'image/jpeg', 0.7); // 70% quality jpeg thumbnail
+        }, file.type === 'image/png' ? 'image/png' : 'image/jpeg', 0.7);
       };
       img.src = e.target.result;
     };

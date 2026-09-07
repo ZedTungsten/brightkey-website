@@ -48,7 +48,8 @@ test('every module page is gated by its assigned module, including shared pages'
       'dashboard/sales-crm/customers/app.js',
       'dashboard/sales-schedule.html',
       'dashboard/sales-stocks.html',
-      'dashboard/media/media.js'
+      'dashboard/media/media.js',
+      'dashboard/posting/image-editor/image-editor.js'
     ],
     'Customer Service': [
       'dashboard/cs-customers.js',

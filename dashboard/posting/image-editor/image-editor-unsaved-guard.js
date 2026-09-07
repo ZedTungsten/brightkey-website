@@ -26,10 +26,17 @@
       pendingLeaveAction = leaveAction;
       app.openModal(document.getElementById('unsaved-changes-overlay'));
     };
+    const proceedWithoutSaving = () => {
+      const leaveAction = pendingLeaveAction;
+      app.closeModal(document.getElementById('unsaved-changes-overlay'));
+      pendingLeaveAction = null; historyGuardActive = false; allowPageUnload = true;
+      leaveAction?.();
+    };
     const bind = () => {
       const overlay = document.getElementById('unsaved-changes-overlay');
       const saveButton = document.getElementById('unsaved-changes-save');
       document.getElementById('unsaved-changes-cancel').addEventListener('click', closeDialog);
+      document.getElementById('unsaved-changes-discard').addEventListener('click', proceedWithoutSaving);
       overlay.addEventListener('click', event => { if (event.target === overlay) closeDialog(); });
       saveButton.addEventListener('click', async () => {
         const leaveAction = pendingLeaveAction;
