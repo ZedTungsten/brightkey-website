@@ -323,7 +323,10 @@ window.WarehousePage = {
     if (!invRow || invRow.length === 0) return;
 
     const inv = invRow[0];
-    const updates = { cancelled: (inv.cancelled || 0) + qty };
+    const updates = {
+      available: (inv.available || 0) + qty,
+      cancelled: (inv.cancelled || 0) + qty
+    };
     if (prevStatus === 'packed') {
       updates.packed = Math.max(0, (inv.packed || 0) - qty);
     } else {
