@@ -254,7 +254,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/warehouse/shared.js?v=20260907-pack-badge-orders"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260909-hide-cancelled-items"></script>
   <script>
     'use strict';
 
@@ -414,7 +414,7 @@
 
       const bookingsQuery = companyId
         ? sb.from('installation_bookings')
-          .select('order_no, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address, notes, pickup_date, pickup_time, pickup_notes')
+          .select('order_no, products, scheduled_date, scheduled_time, status, customer_name, customer_city, customer_address, notes, pickup_date, pickup_time, pickup_notes')
           .eq('company_id', companyId)
         : Promise.resolve({ data: [], error: null });
 
@@ -863,12 +863,22 @@
       const tbody = document.getElementById('dispatch-list');
       tbody.innerHTML = '';
 
-      const dispatchQueue = activeTransactions.filter(t => {
+      const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
+      const transactionsByReference = new Map();
+      activeTransactions.forEach(transaction => {
+        const referenceId = transaction.reference_id || '';
+        if (!transactionsByReference.has(referenceId)) transactionsByReference.set(referenceId, []);
+        transactionsByReference.get(referenceId).push(transaction);
+      });
+      const visibleTransactions = [...transactionsByReference.entries()].flatMap(([referenceId, transactions]) =>
+        window.getActiveOrderTransactions(transactions, bookingByOrder.get(referenceId))
+      );
+      const dispatchQueue = visibleTransactions.filter(t => {
         if (t.status !== 'packed') return false;
         const p = (allProducts || []).find(prod => prod.sku === t.sku);
         if (window.isNonInventoryItem && window.isNonInventoryItem(t.sku, p)) return false;
         if (t.reference_id) {
-          const hasUnpacked = activeTransactions.some(other => 
+          const hasUnpacked = visibleTransactions.some(other =>
             other.reference_id === t.reference_id && 
             ['reserved', 'inspect'].includes(other.status) &&
             (!window.isNonInventoryItem || !window.isNonInventoryItem(other.sku, (allProducts || []).find(prod => prod.sku === other.sku)))
@@ -906,7 +916,6 @@
         }
       });
 
-      const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
       const deliveryByOrder = new Map();
       dbDeliveryBookings.forEach(booking => {
         const existing = deliveryByOrder.get(booking.reference_id);
@@ -1981,11 +1990,11 @@
         }
 
         // 3. Mark all transactions for this reference_id as 'dispatched'
-        const txsToDispatch = activeTransactions.filter(t => 
-          t.reference_id === pickupOrderReferenceId && 
-          t.status === 'packed' && 
-          t.type === 'customer_order'
-        );
+        const booking = bookings.find(item => item.order_no === pickupOrderReferenceId);
+        const txsToDispatch = window.getActiveOrderTransactions(
+          activeTransactions.filter(t => t.reference_id === pickupOrderReferenceId),
+          booking
+        ).filter(t => t.status === 'packed' && t.type === 'customer_order');
 
         for (const tx of txsToDispatch) {
           const { error: txErr } = await sb.from('inventory_transactions').update({

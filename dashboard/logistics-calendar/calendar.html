@@ -698,6 +698,40 @@
       return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function getActiveOrderTransactions(transactions, booking) {
+      const normalizedSku = value => String(value || '').trim().toUpperCase();
+      const positiveQuantity = value => Math.max(1, Number(value) || 1);
+      const cancelledQuantityBySku = new Map();
+      (Array.isArray(booking?.products) ? booking.products : []).forEach(product => {
+        if (product?.cancelled !== true) return;
+        const sku = normalizedSku(product.sku);
+        if (!sku) return;
+        cancelledQuantityBySku.set(sku, (cancelledQuantityBySku.get(sku) || 0) + positiveQuantity(product.qty));
+      });
+
+      const candidates = [];
+      (transactions || []).forEach(transaction => {
+        const sku = normalizedSku(transaction?.sku);
+        const quantity = positiveQuantity(transaction?.quantity);
+        const isCancelled = Boolean(transaction?.timestamp_cancelled)
+          || ['cancelled', 'canceled'].includes(String(transaction?.status || '').trim().toLowerCase());
+        if (isCancelled) {
+          cancelledQuantityBySku.set(sku, Math.max(0, (cancelledQuantityBySku.get(sku) || 0) - quantity));
+          return;
+        }
+        candidates.push(transaction);
+      });
+
+      return candidates.filter(transaction => {
+        const sku = normalizedSku(transaction.sku);
+        const quantity = positiveQuantity(transaction.quantity);
+        const cancelledQuantity = cancelledQuantityBySku.get(sku) || 0;
+        if (cancelledQuantity <= 0) return true;
+        cancelledQuantityBySku.set(sku, Math.max(0, cancelledQuantity - quantity));
+        return false;
+      });
+    }
+
     function getLogisticsCustomerIdentity(record = {}) {
       const text = value => String(value || '').trim();
       const isCompany = record.customer_is_company === true;
@@ -903,8 +937,8 @@
         this.renderCalendar();
       },
 
-      visibleTransactions(transactions) {
-        return (transactions || []).filter(transaction => String(transaction.status || '').trim().toLowerCase() !== 'cancelled');
+      visibleTransactions(transactions, booking) {
+        return getActiveOrderTransactions(transactions, booking);
       },
 
       scheduleMatchesSearch(refId, txs) {
@@ -1009,7 +1043,8 @@
 
           matches.forEach(([refId, sched]) => {
             const orderTransactions = this.activeTransactions.filter(t => t.reference_id === refId);
-            const txs = this.visibleTransactions(orderTransactions);
+            const installationBooking = this.installationBookings.find(booking => booking.order_no === refId);
+            const txs = this.visibleTransactions(orderTransactions, installationBooking);
             if (orderTransactions.length > 0 && txs.length === 0) return;
             if (!this.scheduleMatchesSearch(refId, txs)) return;
             const customerName = txs[0]?.customer_name || 'N/A';
@@ -1063,9 +1098,9 @@
 
       async openDetailsModal(refId) {
         // Fallback to local cache initially so the user doesn't wait
-        let txs = this.visibleTransactions(this.activeTransactions.filter(t => t.reference_id === refId));
         let db = this.deliveryBookings.find(b => b.reference_id === refId);
         let ib = this.installationBookings.find(b => b.order_no === refId);
+        let txs = this.visibleTransactions(this.activeTransactions.filter(t => t.reference_id === refId), ib);
         
         // Open the modal right away with cached data
         this.renderModalContent(refId, txs, db, ib);
@@ -1079,14 +1114,14 @@
             sb.from('installation_bookings').select('*').eq('company_id', this.companyId).eq('order_no', refId).maybeSingle()
           ]);
 
-          if (liveTxsRes.data) {
-            txs = this.visibleTransactions(liveTxsRes.data);
-          }
           if (liveDbRes.data) {
             db = liveDbRes.data;
           }
           if (liveIbRes.data) {
             ib = liveIbRes.data;
+          }
+          if (liveTxsRes.data) {
+            txs = this.visibleTransactions(liveTxsRes.data, ib);
           }
 
           // Re-render modal content with fresh data
