@@ -13,6 +13,22 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
   <link rel="stylesheet" href="shared.css?v=20260903-1" />
+  <style>
+    .receipt-photo-proof-error {
+      border-color: var(--danger) !important;
+    }
+
+    .unreceived-label { color: var(--danger); }
+    .unreceived-issued-date { display: block; margin-top: 0.35rem; color: var(--text-muted); font-size: 0.74rem; }
+    .unreceived-actions { display: flex; justify-content: flex-end; gap: 0.45rem; flex-wrap: wrap; }
+    .btn-purple { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+    .btn-purple:hover { background: #6d28d9; border-color: #6d28d9; }
+    .btn-solid-danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .readded-pill { display: inline-flex; margin-left: 0.45rem; padding: 0.12rem 0.42rem; border: 1px solid var(--cyan); border-radius: 999px; background: #fff; color: var(--cyan); font-family: Commissioner, sans-serif; font-size: 0.62rem; font-weight: 700; line-height: 1.2; text-transform: uppercase; vertical-align: middle; }
+    .shipment-choice { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 0.7rem; align-items: start; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+    .shipment-choice:hover { border-color: var(--cyan); background: var(--cyan-dim); }
+    .shipment-choice + .shipment-choice { margin-top: 0.55rem; }
+  </style>
 </head>
 <body>
   <div class="toast-container" id="toast-container"></div>
@@ -226,6 +242,36 @@
     </div>
   </div>
 
+  <!-- Modal: Include an unreceived SKU in an active incoming shipment -->
+  <div id="include-unreceived-modal" class="modal-overlay" onclick="closeIncludeUnreceivedModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:10001; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:100%; max-width:520px; max-height:85vh; overflow-y:auto; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.5rem; box-shadow:0 12px 48px rgba(0,0,0,0.25);" onclick="event.stopPropagation()">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding-bottom:0.75rem;">
+        <h3 class="modal-title" style="margin:0; font-size:1.05rem;">Include to Shipment</h3>
+        <button type="button" class="modal-close" onclick="closeIncludeUnreceivedModal()" aria-label="Close" style="background:none; border:none; color:var(--text-muted); cursor:pointer;">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p id="include-unreceived-summary" style="margin:1rem 0 0.75rem; color:var(--text-secondary); font-size:0.82rem;"></p>
+      <div id="include-unreceived-shipments"></div>
+      <div style="display:flex; justify-content:flex-end; gap:0.65rem; margin-top:1.1rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <button type="button" class="btn btn-outline" onclick="closeIncludeUnreceivedModal()">Cancel</button>
+        <button type="button" id="btn-confirm-include-unreceived" class="btn btn-purple" onclick="confirmIncludeUnreceived()" disabled>Include to Shipment</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Discard an unreceived SKU -->
+  <div id="discard-unreceived-modal" class="modal-overlay" onclick="closeDiscardUnreceivedModalOuter(event)" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); backdrop-filter:blur(4px); z-index:10001; align-items:center; justify-content:center;">
+    <div class="modal-content" style="width:100%; max-width:440px; background:var(--bg-surface); border:1px solid var(--border); border-radius:12px; padding:1.5rem; box-shadow:0 12px 48px rgba(0,0,0,0.25);" onclick="event.stopPropagation()">
+      <h3 class="modal-title" style="margin:0 0 0.65rem; font-size:1.05rem;">Discard unreceived item?</h3>
+      <p id="discard-unreceived-summary" style="margin:0; color:var(--text-secondary); font-size:0.82rem; line-height:1.55;"></p>
+      <div style="display:flex; justify-content:flex-end; gap:0.65rem; margin-top:1.1rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <button type="button" class="btn btn-outline" onclick="closeDiscardUnreceivedModal()">Cancel</button>
+        <button type="button" id="btn-confirm-discard-unreceived" class="btn btn-solid-danger" onclick="confirmDiscardUnreceived()">Discard</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="modal-overlay" onclick="this.classList.remove('open'); setTimeout(() => { this.style.display='none'; }, 150);" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:10000; align-items:center; justify-content:center; cursor:zoom-out;">
     <div style="position:relative; max-width:90vw; max-height:90vh;" onclick="event.stopPropagation()">
@@ -238,7 +284,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/warehouse/shared.js?v=20260907-pack-badge-orders"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260909-unreceived-queue"></script>
   <script>
     'use strict';
 
@@ -358,7 +404,7 @@
       // 3. Fetch transactions — scoped to active warehouse
       let txQuery = sb.from('inventory_transactions').select('*').order('created_at', { ascending: false });
       if (companyId) txQuery = txQuery.or(`company_id.eq.${companyId},company_id.is.null`);
-      txQuery = txQuery.in('status', ['ordered', 'dispatched', 'returned']);
+      txQuery = txQuery.in('status', ['ordered', 'dispatched', 'returned', 'unreceived']);
       if (activeWarehouseId) {
         txQuery = txQuery.eq('warehouse_id', activeWarehouseId);
       } else {
@@ -742,8 +788,8 @@
     // Render Tab 3: Receive
     const checkedReceiveTransactions = new Set();
 
-    function shipmentItemsAreChecked(transactions) {
-      return transactions.length > 0 && transactions.every(transaction => checkedReceiveTransactions.has(transaction.id));
+    function shipmentHasCheckedItems(transactions) {
+      return transactions.some(transaction => checkedReceiveTransactions.has(transaction.id));
     }
 
     window.toggleShipmentReceiveItem = function(referenceId, transactionId, checked) {
@@ -752,7 +798,7 @@
       const group = activeTransactions.filter(transaction => transaction.reference_id === referenceId && ['ordered', 'dispatched'].includes(transaction.status));
       const button = Array.from(document.querySelectorAll('[data-receive-reference]'))
         .find(candidate => candidate.dataset.receiveReference === referenceId);
-      if (button) button.disabled = !shipmentItemsAreChecked(group);
+      if (button) button.disabled = !shipmentHasCheckedItems(group);
     };
 
     function renderReceiveTab() { if (!document.getElementById('receive-list')) return;
@@ -764,6 +810,8 @@
           ? t.warehouse_id === activeWarehouseId 
           : (t.warehouse_id === null || !t.warehouse_id);
         if (!matchesWarehouse) return false;
+
+        if (t.status === 'unreceived') return true;
 
         const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
         if (isIncoming) {
@@ -782,7 +830,8 @@
         return;
       }
 
-      const incomingShipments = pending.filter(transaction => transaction.reference_id && (transaction.reference_id.startsWith('RCV-') || transaction.reference_id.startsWith('SUP-')));
+      const unreceivedTransactions = pending.filter(transaction => transaction.status === 'unreceived');
+      const incomingShipments = pending.filter(transaction => transaction.status !== 'unreceived' && transaction.reference_id && (transaction.reference_id.startsWith('RCV-') || transaction.reference_id.startsWith('SUP-')));
       const shipmentGroups = new Map();
       incomingShipments.forEach(transaction => {
         if (!shipmentGroups.has(transaction.reference_id)) shipmentGroups.set(transaction.reference_id, []);
@@ -793,7 +842,10 @@
         const first = transactions[0];
         const sourceLabel = referenceId.startsWith('SUP-') ? 'Supplier Order' : 'Incoming Shipment';
         const statusClass = first.status === 'dispatched' ? 'badge-dispatched' : 'badge-ordered';
-        const sortedTransactions = [...transactions].sort((a, b) => String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { sensitivity: 'base', numeric: true }));
+        const sortedTransactions = [...transactions].sort((a, b) => {
+          const readdedOrder = Number(Boolean(a.receive_readded)) - Number(Boolean(b.receive_readded));
+          return readdedOrder || String(a.sku || '').localeCompare(String(b.sku || ''), undefined, { sensitivity: 'base', numeric: true });
+        });
         const itemsHtml = sortedTransactions.map(transaction => {
           const product = allProducts.find(candidate => candidate.sku === transaction.sku) || { image_main: '', title: '' };
           const imageSrc = product.image_main && product.image_main.match(/^https?:\/\//) ? product.image_main : '../../assets/og-image.png';
@@ -801,7 +853,7 @@
             <label style="display:grid; grid-template-columns:28px 64px minmax(140px,220px) minmax(180px,1fr) 70px; gap:0.75rem; align-items:center; padding:0.55rem 0; border-bottom:1px solid var(--border); cursor:pointer;">
               <input type="checkbox" ${checkedReceiveTransactions.has(transaction.id) ? 'checked' : ''} onchange="toggleShipmentReceiveItem('${escFulfillment(referenceId)}', '${transaction.id}', this.checked)" aria-label="Confirm ${escFulfillment(transaction.sku)} received" />
               <img src="${escFulfillment(imageSrc)}" alt="${escFulfillment(transaction.sku)}" style="width:56px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated);" />
-              <code style="font-weight:700; color:var(--text-primary);">${escFulfillment(transaction.sku)}</code>
+              <code style="font-weight:700; color:var(--text-primary);">${escFulfillment(transaction.sku)}${transaction.receive_readded ? '<span class="readded-pill">Re-added</span>' : ''}</code>
               <span style="color:var(--text-secondary);">${escFulfillment(product.title || 'Untitled product')}</span>
               <strong style="text-align:right;">${transaction.quantity}</strong>
             </label>`;
@@ -822,7 +874,7 @@
                   </div>
                   ${itemsHtml}
                 </div>
-                <button class="btn btn-cyan btn-sm" data-receive-reference="${escFulfillment(referenceId)}" onclick="openConfirmReceiptModal('${escFulfillment(referenceId)}')" ${shipmentItemsAreChecked(transactions) ? '' : 'disabled'}>
+                <button class="btn btn-cyan btn-sm" data-receive-reference="${escFulfillment(referenceId)}" onclick="openConfirmReceiptModal('${escFulfillment(referenceId)}')" ${shipmentHasCheckedItems(transactions) ? '' : 'disabled'}>
                   <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.5" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                   Receive
                 </button>
@@ -831,7 +883,49 @@
           </tr>`;
       });
 
+      if (unreceivedTransactions.length > 0) {
+        const issuedDates = Array.from(new Set(unreceivedTransactions.map(transaction =>
+          new Date(transaction.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        ))).sort();
+        const unreceivedItemsHtml = [...unreceivedTransactions]
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at) || String(a.sku || '').localeCompare(String(b.sku || '')))
+          .map(transaction => {
+            const product = allProducts.find(candidate => candidate.sku === transaction.sku) || { image_main: '', title: '' };
+            const imageSrc = product.image_main && product.image_main.match(/^https?:\/\//) ? product.image_main : '../../assets/og-image.png';
+            return `
+              <div style="display:grid; grid-template-columns:64px minmax(140px,220px) minmax(180px,1fr) 70px minmax(240px,auto); gap:0.75rem; align-items:center; padding:0.55rem 0; border-bottom:1px solid var(--border);">
+                <img src="${escFulfillment(imageSrc)}" alt="${escFulfillment(transaction.sku)}" style="width:56px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border); background:var(--bg-elevated);" />
+                <code style="font-weight:700; color:var(--text-primary);">${escFulfillment(transaction.sku)}</code>
+                <span style="color:var(--text-secondary);">${escFulfillment(product.title || 'Untitled product')}</span>
+                <strong style="text-align:right;">${transaction.quantity}</strong>
+                <div class="unreceived-actions">
+                  <button type="button" class="btn btn-purple btn-sm" onclick="openIncludeUnreceivedModal('${transaction.id}')">Include to Shipment</button>
+                  <button type="button" class="btn btn-solid-danger btn-sm" onclick="openDiscardUnreceivedModal('${transaction.id}')">Discard</button>
+                </div>
+              </div>`;
+          }).join('');
+
+        tbody.innerHTML += `
+          <tr>
+            <td colspan="3" style="padding:1rem 1.25rem;">
+              <div style="display:grid; grid-template-columns:minmax(170px,0.7fr) minmax(560px,2fr); gap:1.25rem; align-items:start;">
+                <div>
+                  <strong class="unreceived-label" style="display:block; margin-bottom:0.3rem;">Unreceived</strong>
+                  ${issuedDates.map(date => `<span class="unreceived-issued-date">Order issued: ${escFulfillment(date)}</span>`).join('')}
+                </div>
+                <div>
+                  <div style="display:grid; grid-template-columns:64px minmax(140px,220px) minmax(180px,1fr) 70px minmax(240px,auto); gap:0.75rem; padding-bottom:0.4rem; border-bottom:1px solid var(--border); color:var(--text-muted); font-size:0.68rem; font-weight:700; text-transform:uppercase;">
+                    <span>Image</span><span>SKU</span><span>Product Title</span><span style="text-align:right;">Qty</span><span style="text-align:right;">Action</span>
+                  </div>
+                  ${unreceivedItemsHtml}
+                </div>
+              </div>
+            </td>
+          </tr>`;
+      }
+
       pending.filter(transaction => !incomingShipments.includes(transaction)).forEach(transaction => {
+        if (transaction.status === 'unreceived') return;
         const product = allProducts.find(candidate => candidate.sku === transaction.sku) || { title: 'Unknown Product', image_main: '' };
         const imageSrc = product.image_main && product.image_main.match(/^https?:\/\//) ? product.image_main : '../../assets/og-image.png';
         tbody.innerHTML += `
@@ -1153,13 +1247,183 @@
     let recPhotoBlob = null;
     let recStream = null;
     let currentReceivingShipmentTransactions = [];
+    let currentReceivingUnselectedTransactions = [];
+    let currentReceivingCompletesShipment = false;
+    let selectedUnreceivedTransactionId = null;
+    let selectedIncomingReferenceId = null;
+    let pendingDiscardUnreceivedTransactionId = null;
 
-    window.openConfirmReceiptModal = function(refId) {
-      currentReceivingShipmentTransactions = activeTransactions.filter(transaction =>
+    function openWarehouseModal(modal) {
+      modal.style.display = 'flex';
+      modal.offsetHeight;
+      modal.classList.add('open');
+    }
+
+    function closeWarehouseModal(modal) {
+      modal.classList.remove('open');
+      setTimeout(() => { modal.style.display = 'none'; }, 150);
+    }
+
+    function getActiveIncomingShipmentGroups() {
+      const groups = new Map();
+      activeTransactions.forEach(transaction => {
+        const referenceId = transaction.reference_id;
+        const matchesWarehouse = activeWarehouseId
+          ? transaction.warehouse_id === activeWarehouseId
+          : !transaction.warehouse_id;
+        const isIncoming = referenceId && (referenceId.startsWith('RCV-') || referenceId.startsWith('SUP-'));
+        const hasBooking = deliveryBookings.some(booking => booking.reference_id === referenceId);
+        if (!matchesWarehouse || !isIncoming || !hasBooking || !['ordered', 'dispatched'].includes(transaction.status)) return;
+        if (!groups.has(referenceId)) groups.set(referenceId, []);
+        groups.get(referenceId).push(transaction);
+      });
+      return groups;
+    }
+
+    window.openIncludeUnreceivedModal = function(transactionId) {
+      const transaction = activeTransactions.find(candidate => candidate.id === transactionId && candidate.status === 'unreceived');
+      if (!transaction) {
+        showToast('This unreceived item is no longer available.', true);
+        return;
+      }
+      selectedUnreceivedTransactionId = transactionId;
+      selectedIncomingReferenceId = null;
+      document.getElementById('include-unreceived-summary').textContent = `${transaction.sku} · Qty ${transaction.quantity}`;
+      const container = document.getElementById('include-unreceived-shipments');
+      const groups = getActiveIncomingShipmentGroups();
+      container.innerHTML = groups.size ? Array.from(groups.entries()).map(([referenceId, transactions]) => {
+        const first = transactions[0];
+        const issuedDate = new Date(first.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `
+          <label class="shipment-choice">
+            <input type="radio" name="include-unreceived-shipment" value="${escFulfillment(referenceId)}" onchange="selectIncomingShipment('${escFulfillment(referenceId)}')" />
+            <span>
+              <strong style="display:block; color:var(--text-primary);">${escFulfillment(referenceId)}</strong>
+              <span style="display:block; margin-top:0.2rem; color:var(--text-secondary); font-size:0.78rem;">${escFulfillment(first.customer_name || 'Incoming shipment')} · ${issuedDate}</span>
+            </span>
+          </label>`;
+      }).join('') : '<div class="text-muted" style="padding:1rem; text-align:center;">No active incoming shipments.</div>';
+      document.getElementById('btn-confirm-include-unreceived').disabled = true;
+      openWarehouseModal(document.getElementById('include-unreceived-modal'));
+    };
+
+    window.selectIncomingShipment = function(referenceId) {
+      selectedIncomingReferenceId = referenceId;
+      document.getElementById('btn-confirm-include-unreceived').disabled = !referenceId;
+    };
+
+    window.closeIncludeUnreceivedModal = function() {
+      closeWarehouseModal(document.getElementById('include-unreceived-modal'));
+      selectedUnreceivedTransactionId = null;
+      selectedIncomingReferenceId = null;
+    };
+
+    window.closeIncludeUnreceivedModalOuter = function(event) {
+      if (event.target === document.getElementById('include-unreceived-modal')) closeIncludeUnreceivedModal();
+    };
+
+    window.confirmIncludeUnreceived = async function() {
+      const transaction = activeTransactions.find(candidate => candidate.id === selectedUnreceivedTransactionId && candidate.status === 'unreceived');
+      const targetTransactions = getActiveIncomingShipmentGroups().get(selectedIncomingReferenceId) || [];
+      const target = targetTransactions[0];
+      if (!transaction || !target) {
+        showToast('Select an active incoming shipment.', true);
+        return;
+      }
+      const button = document.getElementById('btn-confirm-include-unreceived');
+      const targetReferenceId = selectedIncomingReferenceId;
+      button.disabled = true;
+      try {
+        const { data, error } = await sb.from('inventory_transactions').update({
+          reference_id: targetReferenceId,
+          status: target.status,
+          customer_name: target.customer_name || null,
+          customer_city: target.customer_city || null,
+          receive_readded: true,
+          updated_at: new Date().toISOString()
+        }).eq('company_id', companyId)
+          .eq('id', transaction.id)
+          .eq('status', 'unreceived')
+          .select('id');
+        if (error) throw error;
+        if (!data?.length) throw new Error('The unreceived item changed before it could be included.');
+        closeIncludeUnreceivedModal();
+        showToast(`${transaction.sku} was included in ${targetReferenceId}.`);
+        await refreshDashboard();
+      } catch (error) {
+        console.error('Could not include unreceived item:', error);
+        showToast('Could not include this item in the shipment.', true);
+        button.disabled = false;
+      }
+    };
+
+    window.openDiscardUnreceivedModal = function(transactionId) {
+      const transaction = activeTransactions.find(candidate => candidate.id === transactionId && candidate.status === 'unreceived');
+      if (!transaction) {
+        showToast('This unreceived item is no longer available.', true);
+        return;
+      }
+      pendingDiscardUnreceivedTransactionId = transactionId;
+      document.getElementById('discard-unreceived-summary').textContent = `Discard ${transaction.sku}, quantity ${transaction.quantity}, from the Unreceived queue?`;
+      openWarehouseModal(document.getElementById('discard-unreceived-modal'));
+    };
+
+    window.closeDiscardUnreceivedModal = function() {
+      closeWarehouseModal(document.getElementById('discard-unreceived-modal'));
+      pendingDiscardUnreceivedTransactionId = null;
+    };
+
+    window.closeDiscardUnreceivedModalOuter = function(event) {
+      if (event.target === document.getElementById('discard-unreceived-modal')) closeDiscardUnreceivedModal();
+    };
+
+    window.confirmDiscardUnreceived = async function() {
+      const transaction = activeTransactions.find(candidate => candidate.id === pendingDiscardUnreceivedTransactionId && candidate.status === 'unreceived');
+      if (!transaction) {
+        showToast('This unreceived item is no longer available.', true);
+        return;
+      }
+      const button = document.getElementById('btn-confirm-discard-unreceived');
+      button.disabled = true;
+      try {
+        const { data, error } = await sb.from('inventory_transactions').update({
+          status: 'discarded',
+          updated_at: new Date().toISOString()
+        }).eq('company_id', companyId)
+          .eq('id', transaction.id)
+          .eq('status', 'unreceived')
+          .select('id');
+        if (error) throw error;
+        if (!data?.length) throw new Error('The unreceived item changed before it could be discarded.');
+        closeDiscardUnreceivedModal();
+        showToast(`${transaction.sku} was discarded from Unreceived.`);
+        await refreshDashboard();
+      } catch (error) {
+        console.error('Could not discard unreceived item:', error);
+        showToast('Could not discard this unreceived item.', true);
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    function setReceiptPhotoProofError(hasError) {
+      ['rec-upload-container', 'rec-camera-container'].forEach(id => {
+        const container = document.getElementById(id);
+        if (!container) return;
+        container.classList.toggle('receipt-photo-proof-error', hasError);
+        container.setAttribute('aria-invalid', String(hasError));
+      });
+    }
+
+    window.openConfirmReceiptModal = async function(refId) {
+      const pendingShipmentTransactions = activeTransactions.filter(transaction =>
         transaction.reference_id === refId && ['ordered', 'dispatched'].includes(transaction.status)
       );
-      if (!shipmentItemsAreChecked(currentReceivingShipmentTransactions)) {
-        showToast('Check every item in this shipment before receiving it.', true);
+      currentReceivingShipmentTransactions = pendingShipmentTransactions.filter(transaction => checkedReceiveTransactions.has(transaction.id));
+      currentReceivingUnselectedTransactions = pendingShipmentTransactions.filter(transaction => !checkedReceiveTransactions.has(transaction.id));
+      currentReceivingCompletesShipment = currentReceivingShipmentTransactions.length === pendingShipmentTransactions.length;
+      if (!currentReceivingShipmentTransactions.length) {
+        showToast('Check at least one item to receive.', true);
         return;
       }
       const tx = currentReceivingShipmentTransactions[0];
@@ -1176,9 +1440,28 @@
       document.getElementById('rec-photo-preview').src = '';
       document.getElementById('rec-photo-preview').style.display = 'none';
       document.getElementById('rec-placeholder').style.display = 'flex';
+      setReceiptPhotoProofError(false);
 
       // Load packed photo & booking photo
-      const booking = deliveryBookings.find(db => db.reference_id === refId);
+      // Incoming supplier shipments may have an initial marker row without an
+      // image and a later delivery-booking row containing the uploaded proof.
+      // Prefer the matching row with a proof so the empty marker cannot hide it.
+      const matchingBookings = deliveryBookings.filter(db => db.reference_id === refId);
+      let booking = matchingBookings.find(db => db.delivery_photo_url) || matchingBookings[0];
+      try {
+        const { data: latestBooking, error: bookingError } = await sb.from('delivery_bookings')
+          .select('id, reference_id, customer_city, delivery_photo_url, base_fee, toll, tip_1, tip_2')
+          .eq('company_id', companyId)
+          .eq('reference_id', refId)
+          .not('delivery_photo_url', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (bookingError) throw bookingError;
+        if (latestBooking) booking = latestBooking;
+      } catch (error) {
+        console.error('Could not refresh delivery booking proof:', error);
+      }
 
       // Populate details
       const customerName = tx ? (tx.customer_name || 'N/A') : 'N/A';
@@ -1235,6 +1518,7 @@
 
     window.closeConfirmReceiptModal = function() {
       stopRecCamera();
+      setReceiptPhotoProofError(false);
       const modal = document.getElementById('confirm-receipt-modal');
       modal.classList.remove('open');
       setTimeout(() => {
@@ -1267,6 +1551,7 @@
       if (!file) return;
       
       recPhotoBlob = file;
+      setReceiptPhotoProofError(false);
 
       const reader = new FileReader();
       reader.onload = function(evt) {
@@ -1311,6 +1596,7 @@
       
       canvas.toBlob(blob => {
         recPhotoBlob = blob;
+        setReceiptPhotoProofError(false);
         preview.src = URL.createObjectURL(blob);
         preview.style.display = 'block';
         placeholder.style.display = 'none';
@@ -1347,11 +1633,12 @@
       );
 
       if (!recPhotoBlob) {
-        showToast('Receiving photo proof is required.', true);
+        setReceiptPhotoProofError(true);
+        showToast('Upload photo', true);
         return;
       }
-      if (!shipmentItemsAreChecked(transactions)) {
-        showToast('Check every item in this shipment before receiving it.', true);
+      if (!transactions.length || !transactions.every(transaction => checkedReceiveTransactions.has(transaction.id))) {
+        showToast('The selected items changed. Close this window and select the items again.', true);
         return;
       }
 
@@ -1466,21 +1753,45 @@
           .in('id', transactions.map(transaction => transaction.id));
         if (txErr) throw txErr;
 
+        // Detach every unchecked line from the completed physical shipment.
+        // These lines remain durable in one Unreceived queue until reassigned
+        // to another active shipment or explicitly discarded.
+        if (currentReceivingUnselectedTransactions.length > 0) {
+          const originalSupplierName = currentReceivingUnselectedTransactions[0].customer_name || null;
+          const { error: unreceivedError } = await sb.from('inventory_transactions').update({
+            status: 'unreceived',
+            reference_id: null,
+            customer_name: null,
+            customer_city: null,
+            unreceived_at: now,
+            unreceived_original_reference_id: refId,
+            unreceived_original_supplier_name: originalSupplierName,
+            receive_readded: false,
+            updated_at: now
+          }).eq('company_id', companyId)
+            .eq('reference_id', refId)
+            .in('id', currentReceivingUnselectedTransactions.map(transaction => transaction.id));
+          if (unreceivedError) throw unreceivedError;
+        }
+
         // 3. Update delivery_bookings
         const baseFeeVal = parseFloat(document.getElementById('rec-fee-base').value) || 0;
         const tollVal = parseFloat(document.getElementById('rec-fee-toll').value) || 0;
         const tip1Val = parseFloat(document.getElementById('rec-fee-tip-1').value) || 0;
         const tip2Val = parseFloat(document.getElementById('rec-fee-tip-2').value) || 0;
 
-        const { error: dbErr } = await sb.from('delivery_bookings').update({
-          status: 'delivered',
+        const bookingUpdate = {
           received_photo_url: receivedPhotoUrl,
-          delivered_at: now,
           base_fee: Math.round(baseFeeVal * 100),
           toll: Math.round(tollVal * 100),
           tip_1: Math.round(tip1Val * 100),
           tip_2: Math.round(tip2Val * 100)
-        }).eq('company_id', companyId).eq('reference_id', refId);
+        };
+        bookingUpdate.status = 'delivered';
+        bookingUpdate.delivered_at = now;
+        const { error: dbErr } = await sb.from('delivery_bookings').update(bookingUpdate)
+          .eq('company_id', companyId)
+          .eq('reference_id', refId);
         if (dbErr) throw dbErr;
 
         // 4. Apply all SKU quantity changes in one request.
@@ -1490,7 +1801,9 @@
         }
 
         transactions.forEach(transaction => checkedReceiveTransactions.delete(transaction.id));
-        showToast('Shipment successfully received!');
+        showToast(currentReceivingCompletesShipment
+          ? 'Shipment successfully received!'
+          : 'Checked items received. Unchecked items moved to Unreceived.');
         closeConfirmReceiptModal();
         await refreshDashboard();
       } catch (err) {

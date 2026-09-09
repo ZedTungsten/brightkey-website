@@ -702,6 +702,56 @@
     showValue('preview-number', state.quotationNumber);
   }
 
+  function compactPdfDocument(documentSnapshot) {
+    const assets = [];
+    const indexes = new Map();
+    const json = JSON.stringify(documentSnapshot).replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+/gi, dataUrl => {
+      let index = indexes.get(dataUrl);
+      if (index === undefined) { index = assets.length; indexes.set(dataUrl, index); assets.push(dataUrl); }
+      return `__BK_PDF_ASSET_${index}__`;
+    });
+    return { document:JSON.parse(json), assets };
+  }
+
+  async function downloadPdf() {
+    const button = byId('quotation-download-pdf');
+    if (!button || button.disabled || state.pdfExporting) return;
+    state.pdfExporting = true;
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Preparing PDF...';
+    try {
+      syncCurrentPage();
+      const snapshot = window.BKQuotationDocument.capture(null, state.companyProfile, state.documentDate, null, null, state.pages);
+      const filename = `Quotation_${String(state.quotationNumber || state.documentDate).replace(/[^a-z0-9-]+/gi, '_')}.pdf`;
+      const response = await window.BKAuth.authenticatedFetch('/api/quotation-pdf', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ company_id:state.companyId, quotation_number:state.quotationNumber, filename, ...compactPdfDocument(snapshot) })
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'The quotation PDF could not be generated.');
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      toast('Quotation PDF downloaded.', 'success');
+    } catch (error) {
+      console.error('Quotation PDF generation failed:', error);
+      toast(error?.message || 'The quotation PDF could not be generated. Please try again.', 'error');
+    } finally {
+      state.pdfExporting = false;
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+
   async function init() {
     try {
       const authInfo = await window.BKAuth.checkRoleGate(['Sales'], '/admin.html');
@@ -722,6 +772,8 @@
         restore:restoreDocument,
         setQuotationNumber, markClean
       });
+      byId('quotation-download-pdf').disabled = false;
+      byId('quotation-download-pdf').addEventListener('click', downloadPdf);
       byId('quotation-loading').hidden = true; byId('quotation-sheet').hidden = false;
     } catch (error) {
       console.error('Unable to initialize quotation builder:', error);
