@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
 import { enforceRateLimit } from '../lib/api/rate-limit.js';
 import { setApiCors } from '../lib/api/security.js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
+dotenv.config({ path: '.env.local', override: false });
+
+const SUPABASE_URL = process.env.SUPABASE_URL
+  || process.env.NEXT_PUBLIC_SUPABASE_URL
+  || 'https://ymjlosnxuhsybkzkoofq.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const EMAIL_FROM = process.env.EMAIL_FROM || 'BrightKey Solutions <noreply@brightkeysolutions.com>';

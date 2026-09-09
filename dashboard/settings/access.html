@@ -9,11 +9,12 @@
   <link rel="stylesheet" href="../../css/style.css" />
   <link rel="icon" type="image/svg+xml" href="../../assets/favicon.svg?v=2" />
 
-  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="../cs-customers.css?v=20260819-chat-clearance-4rem">
+  <link rel="stylesheet" href="shared.css?v=20260908-access-table-5">
 </head>
-<body>
+<body class="cs-customers-page">
 
-  <div class="toast-container" id="toast-container"></div>
+  <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <div class="dash-layout">
     <!-- Sidebar -->
@@ -44,7 +45,7 @@
             <a class="tab-btn" href="/dashboard/settings/installers">Installers</a>
           </div>
 
-          <div class="scroll-area">
+          <div class="scroll-area access-tab-content">
             <!-- Access Content -->
             <div class="tab-panel active">
               <div class="panel-header">
@@ -54,9 +55,21 @@
                   Add Member
                 </button>
               </div>
-              <div class="table-scroll">
-                <div class="card-table">
-                  <table>
+              <div class="cs-page">
+                <div class="cs-panel">
+                  <div class="cs-table-scroll">
+                  <table class="cs-table access-members-table">
+                    <colgroup>
+                      <col class="access-col-number" />
+                      <col class="access-col-email" />
+                      <col class="access-col-name" />
+                      <col class="access-col-access" />
+                      <col class="access-col-date" />
+                      <col class="access-col-status" />
+                      <col class="access-col-actions" />
+                      <col class="access-col-invitation" />
+                      <col class="access-col-reset" />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th style="width:56px; text-align:center;">#</th>
@@ -71,9 +84,11 @@
                       </tr>
                     </thead>
                     <tbody id="members-list-body">
-                      <tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>
+                      <tr><td colspan="9"><div class="loading-wrapper"><span class="spinner-cyan"></span>Loading team members…</div></td></tr>
                     </tbody>
                   </table>
+                  </div>
+                  <footer class="cs-pagination" id="members-count">0 members</footer>
                 </div>
               </div>
             </div>
@@ -336,7 +351,9 @@
 
     async function loadAllMembers() {
       const tbody = document.getElementById('members-list-body');
-      tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading team members...</td></tr>`;
+      const count = document.getElementById('members-count');
+      tbody.innerHTML = `<tr><td colspan="9"><div class="loading-wrapper"><span class="spinner-cyan"></span>Loading team members…</div></td></tr>`;
+      if (count) count.textContent = 'Loading members…';
 
       let activeData = [];
       let inviteData = [];
@@ -403,9 +420,16 @@
         const priorityDifference = accessPriority(a.role) - accessPriority(b.role);
         if (priorityDifference !== 0) return priorityDifference;
 
-        const aAddedAt = Date.parse(a.created_at || '') || 0;
-        const bAddedAt = Date.parse(b.created_at || '') || 0;
-        return bAddedAt - aAddedAt;
+        const parsedA = Date.parse(a.created_at || '');
+        const parsedB = Date.parse(b.created_at || '');
+        const aAddedAt = Number.isNaN(parsedA) ? Number.POSITIVE_INFINITY : parsedA;
+        const bAddedAt = Number.isNaN(parsedB) ? Number.POSITIVE_INFINITY : parsedB;
+        const dateDifference = aAddedAt - bAddedAt;
+        if (dateDifference !== 0) return dateDifference;
+
+        return String(a.user_email || a.email || '').localeCompare(
+          String(b.user_email || b.email || '')
+        );
       };
       activeData.sort(accessThenDateAdded);
 
@@ -432,6 +456,7 @@
 
       if (activeData.length === 0 && inviteData.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">No members found. Use "Add Member" to invite your first team member.</td></tr>`;
+        if (count) count.textContent = '0 members';
         return;
       }
 
@@ -526,6 +551,14 @@
         `;
         tbody.appendChild(tr);
       });
+
+      const memberTotal = activeData.length + inviteData.length;
+      if (count) count.textContent = `${memberTotal} ${memberTotal === 1 ? 'member' : 'members'}`;
+
+      const spacer = document.createElement('tr');
+      spacer.className = 'table-spacer-row';
+      spacer.innerHTML = '<td colspan="9"></td>';
+      tbody.appendChild(spacer);
     }
 
     window.sendInvitation = async function(e) {
@@ -620,7 +653,12 @@
           if (!res.ok) {
             throw new Error(data.error || 'Failed to send reset password email.');
           }
-          showToast(data.email_sent ? 'Password reset email sent to ' + email + '.' : 'Password reset link generated successfully.');
+          SettingsPage.showToast(
+            data.email_sent
+              ? 'Password reset email sent to ' + email + '.'
+              : 'Password reset request completed successfully.',
+            false
+          );
         } catch (err) {
           console.error('Reset password error:', err);
           showToast('Failed to send reset password email: ' + err.message, true);
