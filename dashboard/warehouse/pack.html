@@ -666,7 +666,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/warehouse/shared.js?v=20260907-pack-badge-orders"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260909-hide-cancelled-items"></script>
   <script>
     'use strict';
 
@@ -804,7 +804,7 @@
         : Promise.resolve({ data: [], error: null });
 
       const bookingsQuery = sb.from('installation_bookings')
-        .select('order_no, scheduled_date, scheduled_time, pickup_date, pickup_time')
+        .select('order_no, products, scheduled_date, scheduled_time, pickup_date, pickup_time')
         .eq('company_id', companyId)
         .range(0, 999);
 
@@ -1234,7 +1234,17 @@
 
     function packQueueTransactions() {
       const bookingReferences = new Set(bookings.map(booking => booking.order_no));
-      return activeTransactions.filter(transaction => {
+      const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
+      const transactionsByReference = new Map();
+      activeTransactions.forEach(transaction => {
+        const referenceId = transaction.reference_id || '';
+        if (!transactionsByReference.has(referenceId)) transactionsByReference.set(referenceId, []);
+        transactionsByReference.get(referenceId).push(transaction);
+      });
+      const visibleTransactions = [...transactionsByReference.entries()].flatMap(([referenceId, transactions]) =>
+        window.getActiveOrderTransactions(transactions, bookingByOrder.get(referenceId))
+      );
+      return visibleTransactions.filter(transaction => {
         const product = (allProducts || []).find(item => item.sku === transaction.sku);
         const isNonInventory = window.isNonInventoryItem && window.isNonInventoryItem(transaction.sku, product);
         return (transaction.status === 'inspect'
@@ -1808,11 +1818,11 @@
         // Execute database update
         await wrapActionWithLoading(packOrderBtn, async () => {
           const now = new Date().toISOString();
-          const txsToPack = activeTransactions.filter(t => 
-            t.reference_id === packOrderReferenceId && 
-            ['reserved', 'inspect'].includes(t.status) &&
-            t.type === 'customer_order'
-          );
+          const booking = bookings.find(item => item.order_no === packOrderReferenceId);
+          const txsToPack = window.getActiveOrderTransactions(
+            activeTransactions.filter(t => t.reference_id === packOrderReferenceId),
+            booking
+          ).filter(t => ['reserved', 'inspect'].includes(t.status) && t.type === 'customer_order');
 
           const expectedUnits = txsToPack.reduce((sum, transaction) => sum + Math.max(0, Number(transaction.quantity) || 0), 0);
           if (!txsToPack.length || packOrderAssignments.length !== expectedUnits) {

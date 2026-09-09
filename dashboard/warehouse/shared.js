@@ -9,6 +9,40 @@ window.isNonInventoryItem = function(sku, productObj) {
   return false;
 };
 
+window.getActiveOrderTransactions = function(transactions, booking) {
+  const normalizedSku = value => String(value || '').trim().toUpperCase();
+  const positiveQuantity = value => Math.max(1, Number(value) || 1);
+  const cancelledQuantityBySku = new Map();
+  (Array.isArray(booking?.products) ? booking.products : []).forEach(product => {
+    if (product?.cancelled !== true) return;
+    const sku = normalizedSku(product.sku);
+    if (!sku) return;
+    cancelledQuantityBySku.set(sku, (cancelledQuantityBySku.get(sku) || 0) + positiveQuantity(product.qty));
+  });
+
+  const candidates = [];
+  (transactions || []).forEach(transaction => {
+    const sku = normalizedSku(transaction?.sku);
+    const quantity = positiveQuantity(transaction?.quantity);
+    const isCancelled = Boolean(transaction?.timestamp_cancelled)
+      || ['cancelled', 'canceled'].includes(String(transaction?.status || '').trim().toLowerCase());
+    if (isCancelled) {
+      cancelledQuantityBySku.set(sku, Math.max(0, (cancelledQuantityBySku.get(sku) || 0) - quantity));
+      return;
+    }
+    candidates.push(transaction);
+  });
+
+  return candidates.filter(transaction => {
+    const sku = normalizedSku(transaction.sku);
+    const quantity = positiveQuantity(transaction.quantity);
+    const cancelledQuantity = cancelledQuantityBySku.get(sku) || 0;
+    if (cancelledQuantity <= 0) return true;
+    cancelledQuantityBySku.set(sku, Math.max(0, cancelledQuantity - quantity));
+    return false;
+  });
+};
+
 window.WarehousePage = {
   sb: null,
   companyId: null,
