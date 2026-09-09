@@ -424,15 +424,14 @@
             .then(data => ({ data, error: null }))
             .catch(error => ({ data: [], error }));
           const invitationsRequest = settle(getSb().from('company_invitations').select('email').eq('tenant_id', this.tenantId));
-          const rolesRequest = settle(getSb().from('dashboard_roles').select('*').order('name', { ascending: true }));
           const requestsRequest = settle(getSb().from('employee_update_requests')
             .select('*, employees(first_name, last_name, email, picture_link)')
             .eq('tenant_id', this.tenantId)
             .eq('status', 'pending')
             .order('created_at', { ascending: false }));
           const employeesRequest = settle(sbGet().then(data => ({ data, error: null })));
-          const [structureResult, membersResult, invitationsResult, rolesResult, requestsResult, employeesResult] = await Promise.all([
-            structureRequest, membersRequest, invitationsRequest, rolesRequest, requestsRequest, employeesRequest
+          const [structureResult, membersResult, invitationsResult, requestsResult, employeesResult] = await Promise.all([
+            structureRequest, membersRequest, invitationsRequest, requestsRequest, employeesRequest
           ]);
 
           if (structureResult.error) console.error('Failed to load company structure settings:', structureResult.error);
@@ -449,9 +448,6 @@
           (invitationsResult.data || []).forEach(invitation => {
             if (invitation.email) this.invitedEmails.add(invitation.email.toLowerCase().trim());
           });
-          if (rolesResult.error) console.error('Failed to fetch dashboard roles:', rolesResult.error);
-          this.dynamicRoles = rolesResult.data || [];
-
           // Fetch pending update requests
           this.pendingRequests = [];
           this.pendingRequestsByEmployee = {};

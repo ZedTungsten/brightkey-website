@@ -536,6 +536,7 @@
         try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch (_) { return []; }
       };
       const doors = parseArray(booking.doors);
+      const products = parseArray(booking.products);
       const bookingInstallers = parseArray(booking.installers);
       const legacyIds = String(booking.installer_id || '').split(' | ').filter(Boolean);
       const legacyIndex = legacyIds.indexOf(employeeId);
@@ -553,7 +554,10 @@
         if (isInstallerSummaryDoorCancelled(booking, door, doorIndex, doors)) return [];
         const matches = (Array.isArray(door?.installers) ? door.installers : []).filter(installer => installer?.id === employeeId);
         if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
-        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || bookingCompleted, door, doorIndex }];
+        const completed = window.BKBookingCompletion?.isDoorCompletedForDisplay
+          ? bookingCompleted || window.BKBookingCompletion.isDoorCompletedForDisplay(booking, door, doorIndex, doors, products)
+          : Boolean(door?.completed) || bookingCompleted;
+        return [{ roles: getRoles(matches.length ? matches : bookingMatches), completed, door, doorIndex }];
       });
     }
 

@@ -261,6 +261,7 @@
       if (createNoteButton) createNoteButton.style.display = isInstallerNotes ? 'inline-flex' : 'none';
       if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
       document.body.classList.toggle('booking-all-bookings-page', currentSubpage === 'all-bookings');
+      document.body.classList.toggle('installer-assignments-page', isInstallerAssignments);
       document.body.classList.toggle('installer-notes-page', isInstallerNotes);
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
@@ -451,6 +452,7 @@
       return Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
         || (Boolean(door?.signature) && doorHasCompletionMedia(door));
     }
+    window.BKBookingCompletion = Object.freeze({ isDoorCompletedForDisplay });
 
     function useBookingWorkflowForDoor(booking, door) {
       const key = getBookingWorkflowKeyForDoor(booking, door);
