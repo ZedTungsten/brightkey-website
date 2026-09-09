@@ -258,6 +258,12 @@ window.WarehousePage = {
       );
       return !hasUnpacked;
     }).map(transaction => transaction.reference_id))].length;
+    const getUnreceivedCount = () => this.activeTransactions.filter(transaction => {
+      const matchesWarehouse = this.activeWarehouseId
+        ? transaction.warehouse_id === this.activeWarehouseId
+        : !transaction.warehouse_id;
+      return matchesWarehouse && transaction.status === 'unreceived';
+    }).length;
 
     const renderBadges = (receive, pack, dispatch) => {
       const badges = [
@@ -293,7 +299,7 @@ window.WarehousePage = {
             ? getDispatchCount()
             : Number(row.dispatch_count || 0);
           renderBadges(
-            Number(row.receive_count || 0),
+            Number(row.receive_count || 0) + getUnreceivedCount(),
             getPackCount(),
             dispatchCount
           );
@@ -310,6 +316,8 @@ window.WarehousePage = {
         ? t.warehouse_id === this.activeWarehouseId 
         : (t.warehouse_id === null || !t.warehouse_id);
       if (!matchesWarehouse) return false;
+
+      if (t.status === 'unreceived') return true;
 
       const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
       if (isIncoming) {
