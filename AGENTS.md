@@ -18,6 +18,11 @@ Assume another contributor may be changing the same files on another computer.
   Do not merge or push directly to `main` until the user approves the Preview.
 - After Preview approval, confirm the branch is still current, rerun required
   checks, merge through the pull request, and verify the production deployment.
+- Treat an explicit user instruction to commit, push, and merge as confirmation
+  for that complete scoped Git operation. Do not interrupt the same operation
+  with a redundant confirmation request; continue through the pull request,
+  required checks, Preview review, merge, and production verification. Ask again
+  only if the target, scope, risk, or requested operation materially changes.
 - Database changes use version-controlled Supabase migrations. Production
   migrations run from one controlled CI process after merge, never concurrently
   from developer computers or through ad hoc production Dashboard edits.
@@ -46,6 +51,33 @@ function. This standing authorization covers additive, non-destructive schema
 changes required by the requested feature. Continue to stop for explicit user
 approval before destructive migrations, data rewrites, broad permission changes,
 or changes outside the requested feature's scope.
+
+### Preserve Supabase Migration Versions End to End
+
+Supabase identifies an applied migration by its timestamp version, not by the
+migration name or SQL contents. A migration applied through a connected API may
+receive a generated timestamp that differs from a manually chosen local
+filename. If those versions differ, `supabase db push` stops with “remote
+migration versions not found” even when the schema change itself succeeded.
+
+- Create and version the migration file before production deployment whenever
+  practical, then let the single post-merge CI process apply that exact file.
+- When an additive migration must be applied early for localhost testing through
+  the connected Supabase API, immediately query
+  `supabase_migrations.schema_migrations` for the version Supabase recorded.
+  Rename the local migration file to that exact version before committing it.
+- Before opening or merging a database pull request, compare every newly applied
+  remote migration version with the filenames under `supabase/migrations/`.
+  Matching names or matching SQL are insufficient; the timestamp versions must
+  match exactly.
+- Never apply the same migration concurrently from a developer session and CI.
+  Once it has been applied early, CI should recognize it as already recorded,
+  not attempt to apply a differently versioned copy.
+- If drift is discovered, preserve the already-applied schema and reconcile the
+  repository to the authoritative recorded version. Do not rerun the migration,
+  invent a replacement version, or rewrite production migration history merely
+  to make CI pass. Commit the exact recorded migration filename, run Preview
+  checks, merge it through a pull request, and verify the post-merge Supabase job.
 
 ### Strict Data Isolation Rules
 - **RLS is Enabled by Default**: Every table containing sensitive configurations, orders, bookings, invoices, or third-party keys must have RLS explicitly enabled:
