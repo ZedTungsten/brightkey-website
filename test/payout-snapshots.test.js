@@ -143,3 +143,62 @@ test('component rollover is not repeated after the next cutoff is locked', () =>
     reimbursement: 0
   });
 });
+
+test('component rollover appears only on the first immediate unpaid cutoff', () => {
+  const origin = snapshots.createSnapshot({
+    sourceValue: 100,
+    paidValue: 100,
+    sourceComponents: { commission: 30 }
+  });
+  const app = {
+    payoutSchedules: [15, 30],
+    regularPayoutState: {
+      '2026-08': { [`${employeeId}_30`]: origin },
+      '2026-09': {}
+    },
+    getReconcilablePayoutComponentsCentavos: () => ({
+      installation: 0,
+      commission: 4200,
+      adjustment: 0,
+      reimbursement: 0
+    })
+  };
+
+  const firstPayout = snapshots.systemAdjustment(app, employeeId, '2026-09', 15);
+  const secondPayout = snapshots.systemAdjustment(app, employeeId, '2026-09', 30);
+
+  assert.equal(firstPayout.value, 12);
+  assert.equal(firstPayout.rollovers.commission, 12);
+  assert.equal(secondPayout.value, 0);
+  assert.equal(secondPayout.rollovers.commission, 0);
+});
+
+test('a later cutoff receives a rollover added after the immediate cutoff was locked', () => {
+  const origin = snapshots.createSnapshot({
+    sourceValue: 100,
+    paidValue: 100,
+    sourceComponents: { commission: 30 }
+  });
+  const immediate = snapshots.createSnapshot({
+    sourceValue: 200,
+    paidValue: 200,
+    sourceComponents: { commission: 0 }
+  });
+  const app = {
+    payoutSchedules: [15, 30],
+    regularPayoutState: {
+      '2026-08': { [`${employeeId}_30`]: origin },
+      '2026-09': { [`${employeeId}_15`]: immediate }
+    },
+    getReconcilablePayoutComponentsCentavos: (_id, monthKey, day) => (
+      monthKey === '2026-08' && day === 30
+        ? { installation: 0, commission: 4200, adjustment: 0, reimbursement: 0 }
+        : { installation: 0, commission: 0, adjustment: 0, reimbursement: 0 }
+    )
+  };
+
+  const secondPayout = snapshots.systemAdjustment(app, employeeId, '2026-09', 30);
+
+  assert.equal(secondPayout.value, 12);
+  assert.equal(secondPayout.rollovers.commission, 12);
+});

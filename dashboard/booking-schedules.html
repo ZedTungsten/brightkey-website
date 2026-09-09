@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 
-  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=48">
+  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=49">
   <link rel="stylesheet" href="/dashboard/booking-schedules/notes.css?v=20260831-3">
   <link rel="stylesheet" href="/dashboard/booking-schedules/tools.css?v=2">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -112,7 +112,7 @@
             </div>
 
             <!-- Installers Tab Panel -->
-            <div id="tab-panel-installers" style="display: none; padding-top: 1rem;">
+            <div id="tab-panel-installers" style="display: none;">
               <section class="installer-summary-section">
                 <h2 class="installer-summary-title">Jobs</h2>
                 <div class="installer-summary-table-wrap">
@@ -951,14 +951,14 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
-  <script src="/dashboard/booking-schedules/index.js?v=20260904-completion-state"></script>
+  <script src="/dashboard/booking-schedules/index.js?v=20260909-shared-completion"></script>
   <script src="/dashboard/booking-schedules/door-spec-editor.js?v=20260830-1"></script>
   <script src="/dashboard/booking-schedules/booking-details.js?v=20260905-installer-role"></script>
   <script src="/dashboard/booking-schedules/payment-ledger.js?v=7"></script>
   <script src="/dashboard/booking-schedules/booking-assets.js?v=20260903-remove-dashboard-done"></script>
   <script src="/dashboard/booking-schedules/booking-actions.js?v=5"></script>
   <script src="/dashboard/booking-schedules/receipt.js?v=6"></script>
-  <script src="/dashboard/booking-schedules/installers.js?v=20260905-installer-role"></script>
+  <script src="/dashboard/booking-schedules/installers.js?v=20260909-shared-completion"></script>
   <script src="/dashboard/booking-schedules/notes.js?v=20260831-3"></script>
   <script src="/dashboard/booking-schedules/tools.js?v=2"></script>
   <script>
@@ -975,6 +975,7 @@
       const parse = value => Array.isArray(value) ? value : (() => { try { const result = JSON.parse(value || '[]'); return Array.isArray(result) ? result : []; } catch (_) { return []; } })();
       const jobsFor = (booking, id) => {
         const doors = parse(booking.doors);
+        const products = parse(booking.products);
         const bookingInstallers = parse(booking.installers);
         const legacyIds = String(booking.installer_id || '').split(' | ');
         const legacyIndex = legacyIds.indexOf(id);
@@ -988,10 +989,13 @@
         };
         const completed = ['done', 'completed', 'finished'].includes(String(booking.status || '').toLowerCase());
         if (!doors.length) return bookingAssigned ? [{ roles: roles(bookingMatches), completed }] : [];
-        return doors.flatMap(door => {
+        return doors.flatMap((door, doorIndex) => {
           const matches = parse(door?.installers).filter(installer => installer?.id === id);
           if (!matches.length && (hasDoorAssignments || !bookingAssigned)) return [];
-          return [{ roles: roles(matches.length ? matches : bookingMatches), completed: Boolean(door?.completed) || completed }];
+          const doorCompleted = window.BKBookingCompletion?.isDoorCompletedForDisplay
+            ? completed || window.BKBookingCompletion.isDoorCompletedForDisplay(booking, door, doorIndex, doors, products)
+            : Boolean(door?.completed) || completed;
+          return [{ roles: roles(matches.length ? matches : bookingMatches), completed: doorCompleted }];
         });
       };
       const summaries = people.map(employee => {

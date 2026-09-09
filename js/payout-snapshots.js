@@ -15,6 +15,34 @@
     return Boolean(entry && typeof entry === 'object' && Number.isFinite(Number(entry.source_value_centavos)));
   }
 
+  function hasEarlierUnpaidCutoff(app, employeeId, originOrder, currentOrder) {
+    const schedules = [...(app.payoutSchedules || [15, 30])]
+      .map(Number)
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+    if (!schedules.length) schedules.push(15, 30);
+
+    const [originYear, originMonth] = originOrder.slice(0, 7).split('-').map(Number);
+    const [currentYear, currentMonth] = currentOrder.slice(0, 7).split('-').map(Number);
+    let year = originYear;
+    let month = originMonth;
+
+    while (year < currentYear || (year === currentYear && month <= currentMonth)) {
+      const monthKey = `${year}-${String(month).padStart(2, '0')}`;
+      for (const day of schedules) {
+        const candidateOrder = cutoffOrder(monthKey, day);
+        if (candidateOrder <= originOrder || candidateOrder >= currentOrder) continue;
+        if (!isPaid(app.regularPayoutState?.[monthKey]?.[`${employeeId}_${day}`])) return true;
+      }
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        year += 1;
+      }
+    }
+    return false;
+  }
+
   function systemAdjustment(app, employeeId, monthKey, day) {
     const currentOrder = cutoffOrder(monthKey, day);
     const systemSources = {};
@@ -28,6 +56,10 @@
         const originDay = Number(entryKey.slice(employeeId.length + 1));
         const originOrder = cutoffOrder(originMonth, originDay);
         if (originOrder >= currentOrder) return;
+        // Reserve every outstanding amount for the first unpaid payout after
+        // its source cutoff. Later payout columns must not preview the same
+        // rollover while that immediate cutoff is still open.
+        if (hasEarlierUnpaidCutoff(app, employeeId, originOrder, currentOrder)) return;
 
         const originKey = cutoffKey(originMonth, employeeId, originDay);
         if (origin.source_components_centavos && typeof app.getReconcilablePayoutComponentsCentavos === 'function') {
