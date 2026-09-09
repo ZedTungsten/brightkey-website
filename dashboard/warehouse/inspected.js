@@ -11,7 +11,6 @@
   let sb;
   let companyId;
   let records = [];
-  let selectedFiles = [];
   let productResults = [];
   let businesses = [];
   let selectedGuideline = null;
@@ -73,7 +72,7 @@
     body.replaceChildren();
     const row = body.insertRow();
     const cell = row.insertCell();
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.className = 'empty-cell';
     cell.textContent = 'Deployed records could not be loaded. Refresh and try again.';
     showToast('Deployed records could not be loaded. Refresh and try again.', true);
@@ -85,14 +84,14 @@
     if (!deployedRecords.length) {
       const row = body.insertRow();
       const cell = row.insertCell();
-      cell.colSpan = 7;
+      cell.colSpan = 8;
       cell.className = 'empty-cell';
       cell.textContent = 'No deployed records for this month.';
       return;
     }
     deployedRecords.forEach(record => {
       const row = body.insertRow();
-      [record.code, record.sku, record.reference_id].forEach(value => {
+      [record.code, record.sku, record.reference_id, record.customer_name].forEach(value => {
         const cell = row.insertCell();
         cell.textContent = value || '—';
       });
@@ -112,10 +111,10 @@
 
   async function loadDeployedRecords() {
     const body = byId('deployed-list');
-    body.innerHTML = '<tr><td colspan="7"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading deployed records...</span></div></td></tr>';
+    body.innerHTML = '<tr><td colspan="8"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading deployed records...</span></div></td></tr>';
     const range = deployedMonthRange();
     const { data: transactions, error: transactionError } = await sb.from('inventory_transactions')
-      .select('id, reference_id, sku, timestamp_dispatched')
+      .select('id, reference_id, sku, customer_name, timestamp_dispatched')
       .eq('company_id', companyId)
       .eq('type', 'customer_order')
       .not('timestamp_dispatched', 'is', null)
@@ -151,7 +150,7 @@
     const deployedRecords = (inspections || []).map(inspection => {
       const allocation = allocationByInspection.get(inspection.id);
       const transaction = transactionById.get(allocation?.transaction_id);
-      return { ...inspection, reference_id: allocation?.reference_id, timestamp_dispatched: transaction?.timestamp_dispatched };
+      return { ...inspection, reference_id: allocation?.reference_id, customer_name: transaction?.customer_name, timestamp_dispatched: transaction?.timestamp_dispatched };
     }).sort((a, b) => String(b.timestamp_dispatched).localeCompare(String(a.timestamp_dispatched)));
     renderDeployedRecords(deployedRecords);
   }
@@ -197,29 +196,6 @@
     return svg;
   }
 
-  function renderSelectedMedia() {
-    const list = byId('selected-media-list');
-    list.replaceChildren();
-    selectedFiles.forEach((file, index) => {
-      const row = document.createElement('div');
-      row.className = 'selected-media-item';
-      const name = document.createElement('span');
-      name.className = 'selected-media-name';
-      name.textContent = file.name;
-      const remove = document.createElement('button');
-      remove.className = 'remove-media';
-      remove.type = 'button';
-      remove.setAttribute('aria-label', `Remove ${file.name}`);
-      remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
-      remove.addEventListener('click', () => {
-        selectedFiles.splice(index, 1);
-        renderSelectedMedia();
-      });
-      row.append(mediaIcon(VIDEO_TYPES.has(file.type)), name, remove);
-      list.appendChild(row);
-    });
-  }
-
   function validateFile(file) {
     if (IMAGE_TYPES.has(file.type)) {
       return file.size <= MAX_IMAGE_BYTES ? '' : `${file.name} exceeds the 15 MB image limit.`;
@@ -228,24 +204,6 @@
       return file.size <= MAX_VIDEO_BYTES ? '' : `${file.name} exceeds the 25 MB video limit.`;
     }
     return `${file.name} is not a supported image or video.`;
-  }
-
-  function handleMediaSelection(event) {
-    const incoming = [...event.target.files];
-    if (selectedFiles.length + incoming.length > MAX_MEDIA) {
-      showToast('Upload up to 5 media files only.', true);
-      event.target.value = '';
-      return;
-    }
-    const error = incoming.map(validateFile).find(Boolean);
-    if (error) {
-      showToast(error, true);
-      event.target.value = '';
-      return;
-    }
-    selectedFiles.push(...incoming);
-    event.target.value = '';
-    renderSelectedMedia();
   }
 
   function compressImage(file) {
@@ -798,6 +756,7 @@
     const { data, error, count } = await sb.from('warehouse_inspections')
       .select('id, code, sku, media_urls, inspected_by, inspected_by_name, inspected_at, warehouse_inspection_allocations()', { count: 'exact' })
       .eq('company_id', companyId)
+      .eq('inspection_status', 'completed')
       .is('warehouse_inspection_allocations', null)
       .order('inspected_at', { ascending: false })
       .range(start, start + PAGE_SIZE - 1);
@@ -841,8 +800,6 @@
     byId('inspect-sku-options').replaceChildren();
     clearGuideline();
     generatedCodeSku = '';
-    selectedFiles = [];
-    renderSelectedMedia();
     document.querySelectorAll('#inspect-create-form .form-error').forEach(element => element.classList.remove('form-error'));
   }
 
@@ -851,49 +808,40 @@
     const skuInput = byId('inspect-sku');
     const businessSelect = byId('inspect-business');
     const codeInput = byId('inspect-code');
-    const employeeSelect = byId('inspect-employee');
     const normalizedSku = skuInput.value.trim().toUpperCase();
     const product = productResults.find(item => String(item.sku).toUpperCase() === normalizedSku);
-    const employeeOption = employeeSelect.selectedOptions[0];
     const code = codeInput.value.trim().toUpperCase();
     businessSelect.classList.toggle('form-error', !businessSelect.value);
     skuInput.classList.toggle('form-error', !product);
     codeInput.classList.toggle('form-error', !code);
-    employeeSelect.classList.toggle('form-error', !employeeOption?.value);
-    byId('inspect-media').closest('.media-picker').classList.toggle('form-error', !selectedFiles.length);
-    if (!businessSelect.value || !product || !code || !employeeOption?.value || !selectedFiles.length) {
-      showToast('Select a Business, SKU, and Warehouse Member, and upload at least one media file.', true);
+    if (!businessSelect.value || !product || !code) {
+      showToast('Select a Business and SKU to create the pending inspection.', true);
       return;
     }
     const button = byId('inspect-done-btn');
     button.disabled = true;
     button.textContent = 'Saving...';
-    const uploaded = [];
     try {
-      for (const file of selectedFiles) uploaded.push(await uploadMedia(file));
       const { data: sessionData } = await sb.auth.getSession();
       const { error } = await sb.from('warehouse_inspections').insert({
         company_id: companyId,
         product_id: product.id,
         sku: product.sku,
         code,
-        media_urls: uploaded,
-        inspected_by: employeeOption.value,
-        inspected_by_name: employeeOption.dataset.name,
+        inspection_status: 'pending',
         created_by: sessionData.session?.user?.id || null
       });
       if (error) throw error;
       closeModal('inspect-create-modal');
       resetCreateForm();
-      showToast('Inspection recorded.');
-      await loadRecords(0);
+      showToast('Pending inspection created.');
+      await window.WarehouseInspectedPending.refresh();
     } catch (error) {
       console.error(error);
-      await removeUploads(uploaded);
       showToast(error?.code === '23505' ? 'That inspection code already exists.' : 'The inspection could not be saved. Please try again.', true);
     } finally {
       button.disabled = false;
-      button.textContent = 'Done';
+      button.textContent = 'Create';
     }
   }
 
@@ -923,6 +871,12 @@
         return;
       }
       await Promise.all([loadBusinesses(), loadWarehouseMembers(), loadRecords(0)]);
+      await window.WarehouseInspectedPending.init({
+        sb,
+        companyId,
+        memberSelect: byId('inspect-employee'),
+        onCompleted: () => loadRecords(0)
+      });
       WarehousePage.updateBadgeCounts();
     } catch (error) {
       console.error(error);
@@ -931,8 +885,14 @@
     }
   }
 
-  byId('create-inspect-btn').addEventListener('click', () => { resetCreateForm(); openModal('inspect-create-modal'); });
-  byId('inspect-media').addEventListener('change', handleMediaSelection);
+  byId('create-inspect-btn').addEventListener('click', () => {
+    if (window.WarehouseInspectedPending.atCapacity()) {
+      showToast('Complete a pending inspection before creating another. The maximum is 6.', true);
+      return;
+    }
+    resetCreateForm();
+    openModal('inspect-create-modal');
+  });
   byId('inspect-business').addEventListener('change', event => {
     event.target.classList.remove('form-error');
     const skuInput = byId('inspect-sku');
@@ -956,7 +916,6 @@
   byId('view-inspection-guide-btn').addEventListener('click', renderGuideline);
   byId('deployed-prev-month').addEventListener('click', () => changeDeployedMonth(-1));
   byId('deployed-next-month').addEventListener('click', () => changeDeployedMonth(1));
-  byId('inspect-employee').addEventListener('change', event => event.target.classList.remove('form-error'));
   byId('inspect-create-form').addEventListener('submit', submitInspect);
   byId('inspect-edit-form').addEventListener('submit', submitEdit);
   byId('inspect-edit-media').addEventListener('change', handleEditMediaSelection);

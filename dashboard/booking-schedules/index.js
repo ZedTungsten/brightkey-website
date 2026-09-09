@@ -219,7 +219,7 @@
       const panelInstallerNotes = document.getElementById('tab-panel-installer-notes');
       const panelInstallerTools = document.getElementById('tab-panel-installer-tools');
       const scheduleTabs = document.getElementById('booking-schedule-tabs');
-      const installerTabs = document.getElementById('installer-tabs');
+      const installerTabs = document.getElementById('installer-tabs'); const installerToolsSubtabs = document.getElementById('installer-tools-subtabs');
       const tabInstallerAssignments = document.getElementById('tab-installer-assignments');
       const tabInstallerAccounts = document.getElementById('tab-installer-accounts');
       const tabInstallerNotes = document.getElementById('tab-installer-notes');
@@ -247,7 +247,7 @@
       if (panelInstallerTools) panelInstallerTools.style.display = isInstallerTools ? 'block' : 'none';
       if (scheduleTabs) scheduleTabs.style.display = isInstallersPage ? 'none' : 'flex';
       if (scheduleTabs) scheduleTabs.classList.toggle('booking-controls-active', showsBookingControls);
-      if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none';
+      if (installerTabs) installerTabs.style.display = isInstallersPage ? 'flex' : 'none'; if (installerToolsSubtabs) installerToolsSubtabs.style.display = isInstallerTools ? 'flex' : 'none';
       if (installerTabs) installerTabs.classList.toggle('installer-notes-active', isInstallerNotes);
       if (tabInstallerAssignments) tabInstallerAssignments.classList.toggle('active', isInstallerAssignments);
       if (tabInstallerAccounts) tabInstallerAccounts.classList.toggle('active', isInstallerAccounts);
@@ -262,13 +262,13 @@
       if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
       document.body.classList.toggle('booking-all-bookings-page', currentSubpage === 'all-bookings');
       document.body.classList.toggle('installer-assignments-page', isInstallerAssignments);
-      document.body.classList.toggle('installer-notes-page', isInstallerNotes);
+      document.body.classList.toggle('installer-accounts-page', isInstallerAccounts);
+      document.body.classList.toggle('installer-notes-page', isInstallerNotes); document.body.classList.toggle('installer-tools-page', isInstallerTools);
       document.title = isInstallersPage
         ? 'Installers — Brightkey Admin'
         : 'Installation Schedules — Brightkey Admin';
 
     }
-
     function getMonthDateRange(year, month) {
       const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const lastDay = new Date(year, month + 1, 0).getDate();

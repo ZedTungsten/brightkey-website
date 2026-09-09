@@ -666,7 +666,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/warehouse/shared.js?v=20260909-hide-cancelled-items"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260910-authoritative-workflow-status"></script>
   <script>
     'use strict';
 
@@ -1247,8 +1247,9 @@
       return visibleTransactions.filter(transaction => {
         const product = (allProducts || []).find(item => item.sku === transaction.sku);
         const isNonInventory = window.isNonInventoryItem && window.isNonInventoryItem(transaction.sku, product);
-        return (transaction.status === 'inspect'
-          || (transaction.status === 'reserved' && bookingReferences.has(transaction.reference_id)))
+        const workflowStatus = window.getInventoryTransactionWorkflowStatus(transaction);
+        return (workflowStatus === 'inspect'
+          || (workflowStatus === 'reserved' && bookingReferences.has(transaction.reference_id)))
           && transaction.type === 'customer_order'
           && !String(transaction.reference_id || '').toUpperCase().startsWith('SND-DMG-')
           && !isNonInventory;
@@ -1822,7 +1823,7 @@
           const txsToPack = window.getActiveOrderTransactions(
             activeTransactions.filter(t => t.reference_id === packOrderReferenceId),
             booking
-          ).filter(t => ['reserved', 'inspect'].includes(t.status) && t.type === 'customer_order');
+          ).filter(t => ['reserved', 'inspect'].includes(window.getInventoryTransactionWorkflowStatus(t)) && t.type === 'customer_order');
 
           const expectedUnits = txsToPack.reduce((sum, transaction) => sum + Math.max(0, Number(transaction.quantity) || 0), 0);
           if (!txsToPack.length || packOrderAssignments.length !== expectedUnits) {

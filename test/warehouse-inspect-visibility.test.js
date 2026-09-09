@@ -57,8 +57,8 @@ test('New Inspect generates its read-only code after an exact SKU selection', ()
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   const codePosition = html.indexOf('for="inspect-code"');
-  const mediaPosition = html.indexOf('for="inspect-media"');
-  assert.ok(codePosition > -1 && codePosition < mediaPosition);
+  const createModalEnd = html.indexOf('</form>', html.indexOf('id="inspect-create-form"'));
+  assert.ok(codePosition > -1 && codePosition < createModalEnd);
   assert.match(html, /id="inspect-code"[^>]*placeholder="Select an SKU to generate the code"[^>]*readonly/);
   assert.match(html, /<span class="form-label">Code<\/span>\s*<div class="edit-code-value" id="inspect-edit-code"><\/div>/);
   assert.match(script, /String\(sku\)\.toUpperCase\(\)\.replace\(\/\[\^A-Z0-9\]\/g, ''\)/);
@@ -70,9 +70,65 @@ test('New Inspect generates its read-only code after an exact SKU selection', ()
 test('Inspected modals restore focus before becoming hidden and inert', () => {
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
-  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 5);
+  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 7);
   assert.match(script, /returnFocus\.focus\(\{ preventScroll: true \}\)[\s\S]*?modal\.inert = true;[\s\S]*?setAttribute\('aria-hidden', 'true'\)/);
   assert.match(script, /modal\.inert = false;[\s\S]*?setAttribute\('aria-hidden', 'false'\)[\s\S]*?\.focus\(\{ preventScroll: true \}\)/);
+});
+
+test('New Inspect creates up to six pending cards before media and inspector completion', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const script = read('dashboard/warehouse/inspected.js');
+  const pending = read('dashboard/warehouse/inspected-pending.js');
+  const migration = read('supabase/migrations/20260909165248_add_pending_warehouse_inspections.sql');
+  assert.match(html, /id="pending-inspection-grid"/);
+  assert.match(html, /id="inspect-create-form"[\s\S]*?for="inspect-business"[\s\S]*?for="inspect-sku"[\s\S]*?for="inspect-code"/);
+  assert.doesNotMatch(html.slice(html.indexOf('id="inspect-create-form"'), html.indexOf('</form>', html.indexOf('id="inspect-create-form"'))), /Upload Media|Inspected by/);
+  assert.match(html, /id="inspect-complete-form"[\s\S]*?Upload Media[\s\S]*?Inspected by/);
+  assert.match(script, /inspection_status: 'pending'/);
+  assert.match(script, /window\.WarehouseInspectedPending\.atCapacity\(\)/);
+  assert.match(pending, /const MAX_PENDING = 6/);
+  assert.match(pending, /\.eq\('company_id', companyId\)[\s\S]*?\.eq\('inspection_status', 'pending'\)[\s\S]*?\.limit\(MAX_PENDING\)/);
+  assert.match(pending, /inspection_status: 'completed'/);
+  assert.match(migration, /inspection_status TEXT NOT NULL DEFAULT 'completed'/);
+  assert.match(migration, /warehouse_inspections_company_date_idx|warehouse_inspections_pending_company_created_idx/);
+});
+
+test('Complete Inspection uses the saved checklist with independent required uploads', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const pending = read('dashboard/warehouse/inspected-pending.js');
+  const styles = read('dashboard/warehouse/inspected.css');
+  assert.match(html, /id="inspect-complete-requirements"/);
+  assert.doesNotMatch(html, /id="inspect-complete-media"/);
+  assert.match(pending, /\.from\('global_settings'\)[\s\S]*?\.eq\('company_id', companyId\)[\s\S]*?\.eq\('key', 'inspection_checklist'\)/);
+  assert.match(pending, /requirementUploads\.every\(item => !item\.requirement\.required \|\| \(item\.status === 'done' && item\.url\)\)/);
+  assert.match(pending, /item\.requirement\.required \? 'Required' : 'Optional'/);
+  assert.match(pending, /item\.status = 'uploading'[\s\S]*?item\.url = await uploadMedia\(file\)[\s\S]*?item\.status = 'done'/);
+  assert.match(pending, /Upload failed\. Retry this item\./);
+  assert.match(styles, /\.inspection-requirement-progress[\s\S]*?transition: width \.18s ease/);
+});
+
+test('Complete Inspection enforces the documented image and video limits', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const pending = read('dashboard/warehouse/inspected-pending.js');
+  const styles = read('dashboard/warehouse/inspected.css');
+  assert.match(html, /Images: PNG, JPG, or HEIC — up to 15 MB\. Videos: MOV or MP4 — up to 15 seconds\./);
+  assert.match(pending, /const MAX_IMAGE_BYTES = 15 \* 1024 \* 1024/);
+  assert.match(pending, /const MAX_VIDEO_SECONDS = 15/);
+  assert.match(pending, /videoDuration\(file\)/);
+  assert.match(pending, /byId\('inspect-complete-code'\)\.textContent = record\.code/);
+  assert.match(styles, /#inspect-complete-modal \.modal-title \{ font-size: 1\.15rem; \}/);
+  assert.match(styles, /\.inspection-requirement-status\.required \{ color: var\(--danger\); \}/);
+});
+
+test('A pending inspection can be deleted through a scoped confirmation', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const pending = read('dashboard/warehouse/inspected-pending.js');
+  const styles = read('dashboard/warehouse/inspected.css');
+  assert.match(html, /id="inspect-complete-delete"[^>]*>Delete</);
+  assert.match(html, /id="inspect-pending-delete-modal"[\s\S]*?id="inspect-pending-delete-confirm"/);
+  assert.match(pending, /\.from\('warehouse_inspections'\)[\s\S]*?\.delete\(\)[\s\S]*?\.eq\('id', selectedRecord\.id\)[\s\S]*?\.eq\('company_id', companyId\)[\s\S]*?\.eq\('inspection_status', 'pending'\)/);
+  assert.match(pending, /await removeUploads\(uploaded\)/);
+  assert.match(styles, /\.pending-modal-code \{[^}]*font-size: 1\.5rem/);
 });
 
 test('In Stock provides tenant-scoped edit and protected delete actions', () => {

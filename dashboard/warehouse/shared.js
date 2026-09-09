@@ -9,6 +9,15 @@ window.isNonInventoryItem = function(sku, productObj) {
   return false;
 };
 
+window.getInventoryTransactionWorkflowStatus = function(transaction) {
+  if (transaction?.timestamp_received) return 'received';
+  if (transaction?.timestamp_dispatched) return 'dispatched';
+  if (transaction?.timestamp_packed) return 'packed';
+  if (transaction?.timestamp_inspect) return 'inspect';
+  if (transaction?.timestamp_reserved) return 'reserved';
+  return String(transaction?.status || '').trim().toLowerCase();
+};
+
 window.getActiveOrderTransactions = function(transactions, booking) {
   const normalizedSku = value => String(value || '').trim().toUpperCase();
   const positiveQuantity = value => Math.max(1, Number(value) || 1);
@@ -43,6 +52,34 @@ window.getActiveOrderTransactions = function(transactions, booking) {
   });
 };
 
+window.getDispatchableOrderTransactions = function(transactions, bookings, products) {
+  const bookingByOrder = new Map((bookings || []).map(booking => [booking.order_no, booking]));
+  const transactionsByReference = new Map();
+  (transactions || []).forEach(transaction => {
+    const referenceId = transaction.reference_id || '';
+    if (!transactionsByReference.has(referenceId)) transactionsByReference.set(referenceId, []);
+    transactionsByReference.get(referenceId).push(transaction);
+  });
+  const visibleTransactions = [...transactionsByReference.entries()].flatMap(([referenceId, groupedTransactions]) =>
+    window.getActiveOrderTransactions(groupedTransactions, bookingByOrder.get(referenceId))
+  );
+  const isInventoryItem = transaction => !window.isNonInventoryItem(
+    transaction.sku,
+    (products || []).find(product => product.sku === transaction.sku)
+  );
+
+  return visibleTransactions.filter(transaction => {
+    if (!transaction.reference_id
+      || window.getInventoryTransactionWorkflowStatus(transaction) !== 'packed'
+      || !isInventoryItem(transaction)) return false;
+    return !visibleTransactions.some(other =>
+      other.reference_id === transaction.reference_id
+      && ['reserved', 'inspect'].includes(window.getInventoryTransactionWorkflowStatus(other))
+      && isInventoryItem(other)
+    );
+  });
+};
+
 window.WarehousePage = {
   sb: null,
   companyId: null,
@@ -59,6 +96,7 @@ window.WarehousePage = {
   },
 
   deliveryBookings: [],
+  visibleDispatchOrderCount: null,
 
   _activeTransactions: [],
   get activeTransactions() {
@@ -244,20 +282,22 @@ window.WarehousePage = {
     const allProds = this.allProducts || [];
     const getPackCount = () => [...new Set(this.activeTransactions.filter(transaction =>
       !String(transaction.reference_id || '').toUpperCase().startsWith('SND-DMG-') &&
-      (transaction.status === 'inspect' || (transaction.status === 'reserved' && this.bookings.some(booking => booking.order_no === transaction.reference_id))) &&
+      (window.getInventoryTransactionWorkflowStatus(transaction) === 'inspect'
+        || (window.getInventoryTransactionWorkflowStatus(transaction) === 'reserved'
+          && this.bookings.some(booking => booking.order_no === transaction.reference_id))) &&
       transaction.type === 'customer_order' &&
       !window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))
     ).map(transaction => transaction.reference_id))].length;
-    const getDispatchCount = () => [...new Set(this.activeTransactions.filter(transaction => {
-      if (transaction.status !== 'packed' || !transaction.reference_id) return false;
-      if (window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))) return false;
-      const hasUnpacked = this.activeTransactions.some(other =>
-        other.reference_id === transaction.reference_id &&
-        ['reserved', 'inspect'].includes(other.status) &&
-        !window.isNonInventoryItem(other.sku, allProds.find(product => product.sku === other.sku))
-      );
-      return !hasUnpacked;
-    }).map(transaction => transaction.reference_id))].length;
+    const getDispatchCount = () => {
+      if (document.getElementById('dispatch-list') && Number.isInteger(this.visibleDispatchOrderCount)) {
+        return this.visibleDispatchOrderCount;
+      }
+      return [...new Set(window.getDispatchableOrderTransactions(
+        this.activeTransactions,
+        this.bookings,
+        allProds
+      ).map(transaction => transaction.reference_id))].length;
+    };
     const getUnreceivedCount = () => this.activeTransactions.filter(transaction => {
       const matchesWarehouse = this.activeWarehouseId
         ? transaction.warehouse_id === this.activeWarehouseId

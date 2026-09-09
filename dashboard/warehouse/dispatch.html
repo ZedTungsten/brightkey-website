@@ -254,7 +254,7 @@
   <script src="../../js/auth.js"></script>
   <script src="../../js/sidebar.js"></script>
   <script src="../../js/main.js"></script>
-  <script src="/dashboard/warehouse/shared.js?v=20260909-hide-cancelled-items"></script>
+  <script src="/dashboard/warehouse/shared.js?v=20260910-dispatch-visible-count-2"></script>
   <script>
     'use strict';
 
@@ -864,31 +864,10 @@
       tbody.innerHTML = '';
 
       const bookingByOrder = new Map(bookings.map(booking => [booking.order_no, booking]));
-      const transactionsByReference = new Map();
-      activeTransactions.forEach(transaction => {
-        const referenceId = transaction.reference_id || '';
-        if (!transactionsByReference.has(referenceId)) transactionsByReference.set(referenceId, []);
-        transactionsByReference.get(referenceId).push(transaction);
-      });
-      const visibleTransactions = [...transactionsByReference.entries()].flatMap(([referenceId, transactions]) =>
-        window.getActiveOrderTransactions(transactions, bookingByOrder.get(referenceId))
-      );
-      const dispatchQueue = visibleTransactions.filter(t => {
-        if (t.status !== 'packed') return false;
-        const p = (allProducts || []).find(prod => prod.sku === t.sku);
-        if (window.isNonInventoryItem && window.isNonInventoryItem(t.sku, p)) return false;
-        if (t.reference_id) {
-          const hasUnpacked = visibleTransactions.some(other =>
-            other.reference_id === t.reference_id && 
-            ['reserved', 'inspect'].includes(other.status) &&
-            (!window.isNonInventoryItem || !window.isNonInventoryItem(other.sku, (allProducts || []).find(prod => prod.sku === other.sku)))
-          );
-          if (hasUnpacked) return false;
-        }
-        return true;
-      });
+      const dispatchQueue = window.getDispatchableOrderTransactions(activeTransactions, bookings, allProducts);
 
       if (dispatchQueue.length === 0) {
+        WarehousePage.visibleDispatchOrderCount = 0;
         tbody.innerHTML = `<tr><td colspan="12" class="text-center text-muted" style="padding:2rem 0;">No packed items ready to dispatch.</td></tr>`;
         return;
       }
@@ -942,6 +921,7 @@
 
         return String(a.reference_id).localeCompare(String(b.reference_id));
       });
+      WarehousePage.visibleDispatchOrderCount = orderGroups.length;
 
       orderGroups.forEach(group => {
         const packedDate = formatDispatchDate(group.timestamp_packed, true);
