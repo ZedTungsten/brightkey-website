@@ -68,12 +68,14 @@
     const tags = meaningfulEvents.map(event => `<span class="tool-event-tag">${esc(event.status)}</span>`).join('');
     const date = endpoint === 'end' && issue.ended_on ? issue.ended_on : issue.issued_on;
     const fallback = '/assets/og-image.png';
+    const catalogProduct = state.products.find(product => String(product.sku || '').trim().toUpperCase() === String(issue.sku || '').trim().toUpperCase());
+    const productImage = catalogProduct?.image_main || issue.product_image_url || fallback;
     return `<div class="installer-tool-card-shell" data-issue-id="${esc(issue.id)}">
       <button type="button" class="installer-tool-card">
-        <span class="installer-tool-card-main"><img src="${esc(issue.product_image_url || fallback)}" alt="" onerror="this.src='${fallback}'"><span><strong>${esc(issue.sku)}</strong><span class="tool-title">${esc(issue.product_title)}</span></span></span>
+        <span class="installer-tool-card-main"><img src="${esc(productImage)}" alt="${esc(issue.sku)}" onerror="this.src='${fallback}'"><span><strong>${esc(issue.sku)}</strong><span class="tool-title">${esc(issue.product_title)}</span></span></span>
         <span class="tool-date">${esc(formatDate(date))}</span>${tags ? `<span class="tool-event-tags">${tags}</span>` : ''}
       </button>
-      <button type="button" class="installer-tool-edit" data-edit-issue-id="${esc(issue.id)}" aria-label="Edit ${esc(issue.sku)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
+      <button type="button" class="installer-tool-edit" data-status-issue-id="${esc(issue.id)}" aria-label="Update status for ${esc(issue.sku)}" title="Update status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button>
     </div>`;
   }
 
@@ -94,7 +96,7 @@
       byEmployee.get(issue.employee_id).push(issue);
     });
     if (!state.employees.length) {
-      body.innerHTML = '<tr><td colspan="13" class="installer-tools-empty">No tools issued for this year.</td></tr>';
+      body.innerHTML = '<tr><td colspan="13" class="installer-tools-empty">No SKUs issued for this year.</td></tr>';
       return;
     }
 
@@ -140,11 +142,10 @@
       available.set(String(row.sku).toUpperCase(), row.available);
     });
     $('tool-issue-sku').innerHTML = '<option value="" disabled selected hidden>Select SKU</option>' + state.products
-      .filter(product => (available.get(String(product.sku).toUpperCase()) || 0) > 0 || String(product.sku).toUpperCase() === String(selectedSku).toUpperCase())
       .map(product => {
         const count = available.get(String(product.sku).toUpperCase()) || 0;
-        const availability = count > 0 ? `${count} available` : 'currently issued';
-        return `<option value="${esc(product.sku)}">${esc(product.sku)} — ${esc(product.title)} (${availability})</option>`;
+        const isSelectedIssue = String(product.sku).toUpperCase() === String(selectedSku).toUpperCase();
+        return `<option value="${esc(product.sku)}"${count <= 0 && !isSelectedIssue ? ' disabled' : ''}>${esc(product.sku)} — ${esc(product.title)} (${count} available)</option>`;
       }).join('');
     $('tool-issue-sku').disabled = !warehouseId;
     if (selectedSku) $('tool-issue-sku').value = selectedSku;
@@ -264,8 +265,8 @@
 
   function resetIssueModal() {
     $('tool-edit-issue-id').value = '';
-    $('tool-issue-modal-title').textContent = 'Issue Tools';
-    $('tool-issue-submit').textContent = 'Issue Tool';
+    $('tool-issue-modal-title').textContent = 'Issue SKU';
+    $('tool-issue-submit').textContent = 'Issue SKU';
     $('tool-issue-installer').value = '';
     $('tool-issue-warehouse').value = '';
     populateSkuOptions();
@@ -276,11 +277,53 @@
     renderPhotoProofs();
   }
 
+  function setIssueEditMode(editing) {
+    const hasIssue = Boolean($('tool-edit-issue-id').value);
+    $('tool-issue-read-view').hidden = !hasIssue || editing;
+    $('tool-issue-edit-view').hidden = hasIssue && !editing;
+    $('tool-issue-edit-button').hidden = !hasIssue || editing;
+    $('tool-issue-submit').hidden = false;
+    $('tool-issue-submit').disabled = hasIssue && !editing;
+    if (hasIssue) $('tool-issue-modal-title').textContent = editing ? 'Edit Issued SKU' : 'Issued SKU Details';
+  }
+
+  function renderIssueDetails(issue) {
+    const employee = state.employees.find(item => item.id === issue.employee_id);
+    const warehouse = state.warehouses.find(item => item.id === issue.warehouse_id);
+    $('tool-issue-read-installer').textContent = employee ? employeeName(employee) : '—';
+    $('tool-issue-read-warehouse').textContent = warehouse?.name || '—';
+    $('tool-issue-read-sku').textContent = `${issue.sku} — ${issue.product_title}`;
+    $('tool-issue-read-date').textContent = formatDate(issue.issued_on);
+    const previews = $('tool-issue-read-photos');
+    previews.replaceChildren();
+    const paths = issue.photo_proof_paths || [];
+    if (!paths.length) {
+      const empty = document.createElement('span');
+      empty.className = 'tool-photo-read-empty';
+      empty.textContent = 'No photo proof';
+      previews.append(empty);
+      return;
+    }
+    paths.forEach((path, index) => {
+      const url = state.sb.storage.from('brightkey-assets').getPublicUrl(path).data.publicUrl;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tool-photo-read-button';
+      button.dataset.photoUrl = url;
+      button.setAttribute('aria-label', `View photo proof ${index + 1}`);
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = `Photo proof ${index + 1}`;
+      button.append(image);
+      previews.append(button);
+    });
+  }
+
   function openIssueModal(issue = null) {
     resetIssueModal();
     if (issue) {
       $('tool-edit-issue-id').value = issue.id;
-      $('tool-issue-modal-title').textContent = 'Edit Issued Tool';
+      $('tool-issue-modal-title').textContent = 'Edit Issued SKU';
       $('tool-issue-submit').textContent = 'Save Changes';
       $('tool-issue-installer').value = issue.employee_id;
       $('tool-issue-warehouse').value = issue.warehouse_id;
@@ -289,7 +332,9 @@
       state.existingPhotoPaths = [...(issue.photo_proof_paths || [])];
       state.originalPhotoPaths = [...state.existingPhotoPaths];
       renderPhotoProofs();
+      renderIssueDetails(issue);
     }
+    setIssueEditMode(!issue);
     openModal('tool-issue-modal');
   }
 
@@ -378,12 +423,12 @@
       state.existingPhotoPaths = [];
       state.originalPhotoPaths = [];
       renderPhotoProofs();
-      showToast(editIssueId ? 'Issued tool updated.' : 'Tool issued and inventory deducted.');
+      showToast(editIssueId ? 'Issued SKU updated.' : 'SKU issued and inventory deducted.');
       try { await refresh(); }
       catch (error) { showToast('The change was saved, but the calendar could not be refreshed. Reload the page to see it.', true); }
     } catch (error) {
       if (!issueCreated && uploadedPaths.length) await state.sb.storage.from('brightkey-assets').remove(uploadedPaths);
-      showToast(actionError(error, editIssueId ? 'The issued tool could not be updated. Refresh and try again.' : 'The tool could not be issued. Refresh and try again.'), true);
+      showToast(actionError(error, editIssueId ? 'The issued SKU could not be updated. Refresh and try again.' : 'The SKU could not be issued. Refresh and try again.'), true);
     } finally { button.disabled = false; }
   }
 
@@ -416,12 +461,26 @@
     }
   }
 
+  function openStatusModal(issue) {
+    if (!issue || TERMINAL.has(issue.lifecycle_status)) return;
+    $('tool-status-issue-id').value = issue.id;
+    $('tool-status-title').textContent = `${issue.sku} — ${issue.product_title}`;
+    $('tool-status-date').min = issue.issued_on;
+    $('tool-status-date').value = issue.issued_on > localDate() ? issue.issued_on : localDate();
+    openModal('tool-status-modal');
+  }
+
   async function init({ sb, companyId }) {
     state.sb = sb;
     state.companyId = companyId;
     $('tool-issue-date').value = localDate();
     $('tool-status-date').value = localDate();
     $('issue-tool-button').addEventListener('click', () => openIssueModal());
+    $('tool-issue-edit-button').addEventListener('click', () => setIssueEditMode(true));
+    $('tool-issue-read-photos').addEventListener('click', event => {
+      const photo = event.target.closest('[data-photo-url]');
+      if (photo && typeof window.openLightbox === 'function') window.openLightbox(photo.dataset.photoUrl);
+    });
     $('tool-issue-form').addEventListener('submit', submitIssue);
     $('tool-status-form').addEventListener('submit', submitStatus);
     $('tool-issue-warehouse').addEventListener('change', populateSkuOptions);
@@ -437,21 +496,16 @@
     $('installer-tools-prev-year').addEventListener('click', () => changeYear(-1));
     $('installer-tools-next-year').addEventListener('click', () => changeYear(1));
     $('installer-tools-body').addEventListener('click', event => {
-      const edit = event.target.closest('[data-edit-issue-id]');
-      if (edit) {
-        const issue = state.issues.find(item => item.id === edit.dataset.editIssueId);
-        if (issue) openIssueModal(issue);
+      const status = event.target.closest('[data-status-issue-id]');
+      if (status) {
+        const issue = state.issues.find(item => item.id === status.dataset.statusIssueId);
+        openStatusModal(issue);
         return;
       }
       const card = event.target.closest('[data-issue-id]');
       if (!card) return;
       const issue = state.issues.find(item => item.id === card.dataset.issueId);
-      if (!issue || TERMINAL.has(issue.lifecycle_status)) return;
-      $('tool-status-issue-id').value = issue.id;
-      $('tool-status-title').textContent = `${issue.sku} — ${issue.product_title}`;
-      $('tool-status-date').min = issue.issued_on;
-      $('tool-status-date').value = issue.issued_on > localDate() ? issue.issued_on : localDate();
-      openModal('tool-status-modal');
+      if (issue) openIssueModal(issue);
     });
     document.querySelectorAll('[data-close-tool-modal]').forEach(button => button.addEventListener('click', () => closeModal(button.dataset.closeToolModal)));
     try {

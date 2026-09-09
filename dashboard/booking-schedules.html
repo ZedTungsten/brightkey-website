@@ -9,9 +9,9 @@
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
 
-  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=49">
-  <link rel="stylesheet" href="/dashboard/booking-schedules/notes.css?v=20260831-3">
-  <link rel="stylesheet" href="/dashboard/booking-schedules/tools.css?v=2">
+  <link rel="stylesheet" href="/dashboard/booking-schedules.css?v=55">
+  <link rel="stylesheet" href="/dashboard/booking-schedules/notes.css?v=20260909-2">
+  <link rel="stylesheet" href="/dashboard/booking-schedules/tools.css?v=20260909-6">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -29,7 +29,7 @@
         <span class="top-bar-title" id="booking-page-title">Installation Schedules</span>
         <div style="flex:1"></div>
         <button type="button" class="btn btn-cyan" id="create-installer-note" style="display:none;">Create Notes</button>
-        <button type="button" class="btn installer-tools-issue-button" id="issue-tool-button" style="display:none;">Issue Tools</button>
+        <button type="button" class="btn installer-tools-issue-button" id="issue-tool-button" style="display:none;">Issue SKU</button>
       </div>
 
       <div class="content-area">
@@ -45,6 +45,9 @@
             <a class="tab-btn" id="tab-installer-notes" href="/dashboard/installers/notes">Notes</a>
             <a class="tab-btn" id="tab-installer-tools" href="/dashboard/installers/tools">Tools</a>
           </div>
+          <nav class="drawer-tabs installer-tools-subtabs" id="installer-tools-subtabs" role="tablist" aria-label="Installer tools sections" style="display: none;">
+            <a class="tab-btn active" href="/dashboard/installers/tools" role="tab" aria-selected="true" aria-current="page">Calendar</a>
+          </nav>
 
           <div class="scroll-container">
             
@@ -167,13 +170,19 @@
 
             </div>
 
-            <div id="tab-panel-installer-accounts" style="display: none; padding-top: 1rem;">
+            <div id="tab-panel-installer-accounts" style="display: none;">
               <section class="installer-accounts-section">
                 <div class="installer-accounts-toolbar">
-                  <select id="installer-accounts-status" class="form-input" aria-label="Installer status">
-                    <option value="active">Active</option>
-                    <option value="all">All</option>
-                  </select>
+                  <label class="installer-accounts-status-filter" for="installer-accounts-status">
+                    <span>Status</span>
+                    <span class="installer-accounts-select-shell">
+                      <select id="installer-accounts-status" class="form-input" aria-label="Installer status">
+                        <option value="active">Active</option>
+                        <option value="all">All</option>
+                      </select>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+                    </span>
+                  </label>
                   <div class="installer-password-actions">
                     <button type="button" class="btn btn-outline btn-sm" id="installer-password-edit">Edit Password</button>
                     <button type="button" class="installer-password-action confirm" id="installer-password-confirm" aria-label="Save new passwords" hidden>
@@ -242,14 +251,19 @@
 
             <div id="tab-panel-installer-tools" class="installer-tools-panel" style="display: none;">
               <div class="installer-tools-toolbar">
-                <nav class="drawer-tabs installer-tools-subtabs" aria-label="Installer tools sections">
-                  <a class="tab-btn active" href="/dashboard/installers/tools" aria-current="page">Calendar</a>
-                </nav>
                 <div class="installer-tools-actions">
-                  <div class="tools-year-nav" aria-label="Tool issue year">
-                    <button type="button" class="btn btn-outline btn-sm" id="installer-tools-prev-year" aria-label="Previous year">&lt;</button>
-                    <strong id="installer-tools-year"></strong>
-                    <button type="button" class="btn btn-outline btn-sm" id="installer-tools-next-year" aria-label="Next year">&gt;</button>
+                  <div class="month-picker tools-year-nav" aria-label="Tool issue year">
+                    <button type="button" id="installer-tools-prev-year" aria-label="Previous year">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m15 18-6-6 6-6"></path>
+                      </svg>
+                    </button>
+                    <span class="month-title" id="installer-tools-year"></span>
+                    <button type="button" id="installer-tools-next-year" aria-label="Next year">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6"></path>
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -278,12 +292,24 @@
   <div class="modal-overlay" id="tool-issue-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tool-issue-modal-title">
     <div class="modal-card tool-modal-card">
       <div class="modal-header">
-        <h3 class="modal-title" id="tool-issue-modal-title">Issue Tools</h3>
-        <button type="button" class="modal-close" data-close-tool-modal="tool-issue-modal" aria-label="Close">&times;</button>
+        <h3 class="modal-title" id="tool-issue-modal-title">Issue SKU</h3>
+        <button type="button" class="modal-close tool-modal-close" data-close-tool-modal="tool-issue-modal" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
       </div>
       <form id="tool-issue-form">
         <input type="hidden" id="tool-edit-issue-id">
-        <div class="modal-body tool-modal-form">
+        <div class="modal-body tool-issue-read-view" id="tool-issue-read-view" hidden>
+          <div class="tool-issue-detail"><span>Installer</span><strong id="tool-issue-read-installer"></strong></div>
+          <div class="tool-issue-detail"><span>Warehouse</span><strong id="tool-issue-read-warehouse"></strong></div>
+          <div class="tool-issue-detail"><span>SKU</span><strong id="tool-issue-read-sku"></strong></div>
+          <div class="tool-issue-detail"><span>Date</span><strong id="tool-issue-read-date"></strong></div>
+          <div class="tool-issue-detail">
+            <span>Photo Proof</span>
+            <div class="tool-photo-read-previews" id="tool-issue-read-photos"></div>
+          </div>
+        </div>
+        <div class="modal-body tool-modal-form" id="tool-issue-edit-view">
           <label>Installer<select class="form-input" id="tool-issue-installer" required></select></label>
           <label>Warehouse<select class="form-input" id="tool-issue-warehouse" required></select></label>
           <label>SKU<select class="form-input" id="tool-issue-sku" required disabled></select></label>
@@ -300,7 +326,8 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline" data-close-tool-modal="tool-issue-modal">Cancel</button>
-          <button type="submit" class="btn btn-primary" id="tool-issue-submit">Issue Tool</button>
+          <button type="button" class="btn btn-outline" id="tool-issue-edit-button" hidden>Edit</button>
+          <button type="submit" class="btn btn-primary" id="tool-issue-submit">Issue SKU</button>
         </div>
       </form>
     </div>
@@ -309,8 +336,10 @@
   <div class="modal-overlay" id="tool-status-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="tool-status-modal-title">
     <div class="modal-card tool-modal-card">
       <div class="modal-header">
-        <div><h3 class="modal-title" id="tool-status-modal-title">Update Tool Status</h3><p id="tool-status-title" class="modal-subtitle"></p></div>
-        <button type="button" class="modal-close" data-close-tool-modal="tool-status-modal" aria-label="Close">&times;</button>
+        <div><h3 class="modal-title" id="tool-status-modal-title">Update SKU Status</h3><p id="tool-status-title" class="modal-subtitle"></p></div>
+        <button type="button" class="modal-close tool-modal-close" data-close-tool-modal="tool-status-modal" aria-label="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+        </button>
       </div>
       <form id="tool-status-form">
         <input type="hidden" id="tool-status-issue-id">
@@ -951,16 +980,16 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/js/main.js"></script>
-  <script src="/dashboard/booking-schedules/index.js?v=20260909-shared-completion"></script>
+  <script src="/dashboard/booking-schedules/index.js?v=20260909-installer-tools-subtabs"></script>
   <script src="/dashboard/booking-schedules/door-spec-editor.js?v=20260830-1"></script>
   <script src="/dashboard/booking-schedules/booking-details.js?v=20260905-installer-role"></script>
   <script src="/dashboard/booking-schedules/payment-ledger.js?v=7"></script>
   <script src="/dashboard/booking-schedules/booking-assets.js?v=20260903-remove-dashboard-done"></script>
   <script src="/dashboard/booking-schedules/booking-actions.js?v=5"></script>
   <script src="/dashboard/booking-schedules/receipt.js?v=6"></script>
-  <script src="/dashboard/booking-schedules/installers.js?v=20260909-shared-completion"></script>
+  <script src="/dashboard/booking-schedules/installers.js?v=20260909-installer-history-links"></script>
   <script src="/dashboard/booking-schedules/notes.js?v=20260831-3"></script>
-  <script src="/dashboard/booking-schedules/tools.js?v=2"></script>
+  <script src="/dashboard/booking-schedules/tools.js?v=20260909-show-zero-stock"></script>
   <script>
     // Kept inline so the clean nested route can render the summary even when a local static server caches JS assets.
     window.drawInstallersSummary = function() {
@@ -1031,12 +1060,19 @@
         const fullName = `${employee.first_name || ''} ${employee.last_name || ''}`.trim();
         const initials = `${String(employee.first_name || '').charAt(0)}${String(employee.last_name || '').charAt(0)}`.toUpperCase();
         const avatar = employee.picture_link ? `<img class="installer-summary-avatar" src="${escapeHtml(employee.picture_link)}" alt="">` : `<span class="installer-summary-avatar installer-summary-avatar-fallback">${escapeHtml(initials)}</span>`;
-        return `<div class="installer-summary-person">${avatar}<span>${escapeHtml(fullName)}</span></div>`;
+        return `<div class="installer-summary-person">${avatar}<button type="button" class="installer-summary-filter-link" data-installer-id="${escapeHtml(employee.id)}" aria-label="Filter assignments for ${escapeHtml(fullName)}">${escapeHtml(fullName)}</button></div>`;
       };
       const decimal = value => Number(value || 0).toFixed(1);
       const date = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month:'short', day:'2-digit', year:'numeric' }) : '—';
       const metric = (done, scheduled) => `${done}<span class="installer-scheduled-count"> (${scheduled})</span>`;
       assignmentBody.innerHTML = summaries.map(s => `<tr><td>${person(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${date(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.allService - s.scheduledAllService, s.scheduledAllService)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${decimal(s.credit)}</span><span class="installer-threshold-limit">/${decimal(threshold)}</span></td></tr>`).join('');
+      if (!assignmentBody.dataset.installerFilterBound) {
+        assignmentBody.dataset.installerFilterBound = 'true';
+        assignmentBody.addEventListener('click', event => {
+          const link = event.target.closest('.installer-summary-filter-link');
+          if (link) window.filterInstallerAssignmentHistory?.(link.dataset.installerId);
+        });
+      }
       if (typeof window.drawInstallerAssignmentHistory === 'function') window.drawInstallerAssignmentHistory();
     };
   </script>

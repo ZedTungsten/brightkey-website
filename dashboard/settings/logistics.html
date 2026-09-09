@@ -45,6 +45,32 @@
     .wh-summary-bar {
       display: none !important;
     }
+    #warehouse-scroll { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "warehouses suppliers" "checklist suppliers"; align-items: start; gap: 1rem; }
+    #logistics-warehouses { grid-area: warehouses; }
+    #logistics-suppliers { grid-area: suppliers; margin: 0 !important; }
+    #logistics-inspection-checklist { grid-area: checklist; margin: 0 0 1rem !important; }
+    .inspection-checklist-body { display: grid; gap: 0.85rem; padding: 0.85rem; }
+    .inspection-checklist-copy { margin: 0; color: var(--text-secondary); font-size: 0.78rem; line-height: 1.55; }
+    .inspection-checklist-list { display: grid; gap: 0.65rem; }
+    .inspection-checklist-empty { padding: 1rem; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 0.78rem; text-align: center; }
+    .inspection-checklist-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) 32px; align-items: center; gap: 0.75rem; padding: 0.65rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elevated); }
+    .inspection-guide-upload { position: relative; width: 88px; height: 66px; display: grid; place-items: center; overflow: hidden; border: 1px dashed var(--border-hover); border-radius: 7px; background: var(--bg-surface); color: var(--cyan-light); cursor: pointer; }
+    .inspection-guide-upload:hover { border-color: var(--cyan); background: var(--cyan-dim); }
+    .inspection-guide-upload img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .inspection-guide-upload svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+    .inspection-guide-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .inspection-checklist-fields { min-width: 0; display: grid; gap: 0.35rem; }
+    .inspection-checklist-required { display: flex; align-items: center; gap: .5rem; color: var(--text-secondary); font-size: .7rem; font-weight: 600; }
+    .inspection-checklist-fields small { color: var(--text-muted); font-size: 0.68rem; }
+    .inspection-checklist-actions { display: flex; align-items: center; gap: 0.65rem; }
+    .inspection-checklist-status { color: var(--text-muted); font-size: 0.72rem; font-weight: 600; }
+    @media (max-width: 900px) {
+      #warehouse-scroll { grid-template-columns: minmax(0, 1fr); grid-template-areas: "warehouses" "checklist" "suppliers"; }
+    }
+    @media (max-width: 640px) {
+      .inspection-checklist-row { grid-template-columns: 72px minmax(0, 1fr) 32px; }
+      .inspection-guide-upload { width: 72px; height: 60px; }
+    }
   </style>
 </head>
 <body>
@@ -86,7 +112,7 @@
               <div class="table-scroll" id="warehouse-scroll" style="padding: 1rem;">
                 
                 <!-- Warehouses Section Container -->
-                <div class="panel" style="border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface);">
+                <div class="panel" id="logistics-warehouses" style="border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface);">
                   <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding: 0.6rem 0.85rem;">
                     <div class="panel-title" style="font-weight:700; font-size:0.85rem; color:var(--text-primary);">Warehouses</div>
                     <button class="btn btn-primary btn-sm" id="btn-add-warehouse" onclick="addWarehouse()" style="display:inline-flex; align-items:center; gap:0.35rem; padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 6px;">
@@ -121,7 +147,7 @@
                 </div>
 
                 <!-- Suppliers Section Container -->
-                <div class="panel" style="margin-top: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface);">
+                <div class="panel" id="logistics-suppliers" style="margin-top: 1rem; margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface);">
                   <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border); padding: 0.6rem 0.85rem;">
                     <div class="panel-title" style="font-weight:700; font-size:0.85rem; color:var(--text-primary);">Suppliers</div>
                     <button class="btn btn-primary btn-sm" id="btn-add-supplier" onclick="openAddSupplierModal()" style="display:inline-flex; align-items:center; gap:0.35rem; padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 6px;">
@@ -135,6 +161,23 @@
                     </div>
                   </div>
                 </div>
+
+                <section class="panel" id="logistics-inspection-checklist" aria-labelledby="inspection-checklist-title" style="margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg-surface);">
+                  <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; gap:1rem; border-bottom:1px solid var(--border); padding: 0.6rem 0.85rem;">
+                    <div>
+                      <div class="panel-title" id="inspection-checklist-title" style="font-weight:700; font-size:0.85rem; color:var(--text-primary);">Inspection Checklist</div>
+                    </div>
+                    <span class="inspection-checklist-status" id="inspection-checklist-status">Saved</span>
+                  </div>
+                  <div class="inspection-checklist-body">
+                    <p class="inspection-checklist-copy">Add up to five label and reference-image guides. Required items must be uploaded before an inspection can be completed; optional items may be skipped.</p>
+                    <div class="inspection-checklist-list" id="inspection-checklist-list"></div>
+                    <div class="inspection-checklist-actions">
+                      <button class="btn btn-primary btn-sm" id="add-inspection-checklist-item" type="button">Add Checklist Item</button>
+                      <span class="inspection-checklist-status" id="inspection-checklist-count">0 of 5</span>
+                    </div>
+                  </div>
+                </section>
               </div>
             </div>
           </div>
@@ -453,6 +496,9 @@
     let selectedSupplierPaymentType = '';
     let additionalPaymentQrBlob = null;
     let activeWarehouseId = null;
+    let inspectionChecklist = [];
+    let inspectionChecklistTimer = null;
+    const MAX_INSPECTION_CHECKLIST_ITEMS = 5;
     const showToast = (msg, isError) => SettingsPage.showToast(msg, isError);
     const showConfirmModal = (msg, onConfirm) => SettingsPage.showConfirmModal(msg, onConfirm);
 
@@ -500,7 +546,178 @@
       await loadWarehouses();
       await loadBusinesses();
       await loadSuppliers();
+      await loadInspectionChecklist();
     };
+
+    function safeInspectionGuideImage(value) {
+      const source = String(value || '').trim();
+      return /^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+/=\s]+$/i.test(source) ? source : '';
+    }
+
+    function visibleInspectionChecklist() {
+      return inspectionChecklist
+        .map(item => ({ label: String(item.label || '').trim(), guide_url: safeInspectionGuideImage(item.guide_url), required: item.required !== false }))
+        .filter(item => item.label && item.guide_url)
+        .slice(0, MAX_INSPECTION_CHECKLIST_ITEMS);
+    }
+
+    function setInspectionChecklistStatus(text, failed = false) {
+      const status = document.getElementById('inspection-checklist-status');
+      status.textContent = text;
+      status.style.color = failed ? 'var(--danger)' : text === 'Saving...' ? 'var(--cyan-light)' : 'var(--text-muted)';
+    }
+
+    async function saveInspectionChecklist() {
+      clearTimeout(inspectionChecklistTimer);
+      setInspectionChecklistStatus('Saving...');
+      inspectionChecklistTimer = setTimeout(async () => {
+        try {
+          const { error } = await sb.from('global_settings').upsert({
+            company_id: currentCompanyId,
+            key: 'inspection_checklist',
+            value: visibleInspectionChecklist()
+          }, { onConflict: 'key, company_id' });
+          if (error) throw error;
+          setInspectionChecklistStatus('Saved');
+        } catch (error) {
+          console.error('Inspection checklist could not be saved:', error);
+          setInspectionChecklistStatus('Failed to save', true);
+          showToast('Inspection checklist could not be saved.', true);
+        }
+      }, 700);
+    }
+
+    function inspectionChecklistImage(item, index) {
+      const label = document.createElement('label');
+      label.className = 'inspection-guide-upload';
+      label.setAttribute('aria-label', item.guide_url ? `Replace guide image for item ${index + 1}` : `Upload guide image for item ${index + 1}`);
+      const source = safeInspectionGuideImage(item.guide_url);
+      if (source) {
+        const image = document.createElement('img');
+        image.src = source;
+        image.alt = item.label ? `${item.label} guide` : `Inspection guide ${index + 1}`;
+        label.appendChild(image);
+      } else {
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>';
+        label.appendChild(icon);
+      }
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+      input.addEventListener('change', event => handleInspectionGuideUpload(event, index));
+      label.appendChild(input);
+      return label;
+    }
+
+    function renderInspectionChecklist() {
+      const list = document.getElementById('inspection-checklist-list');
+      list.replaceChildren();
+      if (!inspectionChecklist.length) {
+        const empty = document.createElement('div');
+        empty.className = 'inspection-checklist-empty';
+        empty.textContent = 'No inspection checklist items configured.';
+        list.appendChild(empty);
+      }
+      inspectionChecklist.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'inspection-checklist-row';
+        const fields = document.createElement('div');
+        fields.className = 'inspection-checklist-fields';
+        const input = document.createElement('input');
+        input.className = 'form-input';
+        input.type = 'text';
+        input.value = item.label || '';
+        input.placeholder = 'Checklist label';
+        input.maxLength = 120;
+        input.addEventListener('input', event => {
+          inspectionChecklist[index].label = event.target.value;
+          saveInspectionChecklist();
+        });
+        const help = document.createElement('small');
+        help.textContent = item.guide_url ? 'Click the image to replace it.' : 'Add both a label and image to include this item.';
+        const requiredWrap = document.createElement('label');
+        requiredWrap.className = 'inspection-checklist-required';
+        const requiredSwitch = document.createElement('span');
+        requiredSwitch.className = 'toggle-switch';
+        const requiredInput = document.createElement('input');
+        requiredInput.type = 'checkbox';
+        requiredInput.checked = item.required !== false;
+        requiredInput.setAttribute('aria-label', `${item.label || `Checklist item ${index + 1}`} required`);
+        requiredInput.addEventListener('change', event => {
+          inspectionChecklist[index].required = event.target.checked;
+          saveInspectionChecklist();
+        });
+        const requiredSlider = document.createElement('span');
+        requiredSlider.className = 'toggle-slider';
+        requiredSwitch.append(requiredInput, requiredSlider);
+        requiredWrap.append(requiredSwitch, document.createTextNode('Required'));
+        const remove = document.createElement('button');
+        remove.className = 'btn-action-danger';
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `Remove inspection checklist item ${index + 1}`);
+        remove.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14M10 10v6m4-6v6"/></svg>';
+        remove.addEventListener('click', () => {
+          inspectionChecklist.splice(index, 1);
+          renderInspectionChecklist();
+          saveInspectionChecklist();
+        });
+        fields.append(input, requiredWrap, help);
+        row.append(inspectionChecklistImage(item, index), fields, remove);
+        list.appendChild(row);
+      });
+      const add = document.getElementById('add-inspection-checklist-item');
+      add.disabled = inspectionChecklist.length >= MAX_INSPECTION_CHECKLIST_ITEMS;
+      document.getElementById('inspection-checklist-count').textContent = `${inspectionChecklist.length} of ${MAX_INSPECTION_CHECKLIST_ITEMS}`;
+    }
+
+    function handleInspectionGuideUpload(event, index) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type) || file.size > 1024 * 1024) {
+        showToast('Guide image must be PNG, JPG, GIF, or WebP and less than 1 MB.', true);
+        event.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.addEventListener('load', loadEvent => {
+        const source = safeInspectionGuideImage(loadEvent.target?.result);
+        if (!source || !inspectionChecklist[index]) return;
+        inspectionChecklist[index].guide_url = source;
+        renderInspectionChecklist();
+        saveInspectionChecklist();
+      });
+      reader.readAsDataURL(file);
+    }
+
+    async function loadInspectionChecklist() {
+      try {
+        const { data, error } = await sb.from('global_settings')
+          .select('value')
+          .eq('company_id', currentCompanyId)
+          .eq('key', 'inspection_checklist')
+          .maybeSingle();
+        if (error) throw error;
+        inspectionChecklist = Array.isArray(data?.value)
+          ? data.value.map(item => ({ label: String(item?.label || ''), guide_url: safeInspectionGuideImage(item?.guide_url), required: item?.required !== false })).slice(0, MAX_INSPECTION_CHECKLIST_ITEMS)
+          : [];
+      } catch (error) {
+        console.error('Inspection checklist could not be loaded:', error);
+        showToast('Inspection checklist could not be loaded.', true);
+      }
+      renderInspectionChecklist();
+    }
+
+    document.getElementById('add-inspection-checklist-item').addEventListener('click', () => {
+      if (inspectionChecklist.length >= MAX_INSPECTION_CHECKLIST_ITEMS) {
+        showToast('Inspection checklist supports up to 5 items.', true);
+        return;
+      }
+      inspectionChecklist.push({ label: '', guide_url: '', required: true });
+      renderInspectionChecklist();
+    });
 
     async function loadWarehouses() {
       const container = document.getElementById('warehouse-list');

@@ -561,7 +561,7 @@
       });
     }
 
-    function installerSummaryPerson(employee) {
+    function installerSummaryPerson(employee, linksToHistory = false) {
       const firstName = String(employee.first_name || '').trim();
       const lastName = String(employee.last_name || '').trim();
       const name = `${firstName} ${lastName}`.trim() || 'Unnamed installer';
@@ -569,7 +569,10 @@
       const avatar = employee.picture_link
         ? `<img class="installer-summary-avatar" src="${escapeHtml(employee.picture_link)}" alt="" loading="lazy">`
         : `<span class="installer-summary-avatar installer-summary-avatar-fallback">${escapeHtml(initials)}</span>`;
-      return `<div class="installer-summary-person">${avatar}<span>${escapeHtml(name)}</span></div>`;
+      const nameMarkup = linksToHistory
+        ? `<button type="button" class="installer-summary-filter-link" data-installer-id="${escapeHtml(employee.id)}" aria-label="Filter assignments for ${escapeHtml(name)}">${escapeHtml(name)}</button>`
+        : `<span>${escapeHtml(name)}</span>`;
+      return `<div class="installer-summary-person">${avatar}${nameMarkup}</div>`;
     }
 
     function formatInstallerSummaryCredit(value) {
@@ -638,13 +641,29 @@
       }
       const formatDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : '—';
       const metric = (done, scheduled) => `${done}<span class="installer-scheduled-count"> (${scheduled})</span>`;
-      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.allService - s.scheduledAllService, s.scheduledAllService)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td></tr>`).join('');
+      assignmentBody.innerHTML = summaries.map(s => `<tr><td>${installerSummaryPerson(s.employee, true)}</td><td>${escapeHtml(s.employee.city || '—')}</td><td>${formatDate(s.lastAssigned)}</td><td class="installer-metric-lead">${metric(s.lead - s.scheduledLead, s.scheduledLead)}</td><td class="installer-metric-assist">${metric(s.assist - s.scheduledAssist, s.scheduledAssist)}</td><td class="installer-summary-row-total">${metric(s.installationDone, s.installationScheduled)}</td><td class="installer-metric-service">${metric(s.allService - s.scheduledAllService, s.scheduledAllService)}</td><td class="installer-summary-row-total">${s.total}</td><td><span class="installer-metric-lead">${formatInstallerSummaryCredit(s.credit)}</span><span class="installer-threshold-limit">/${formatInstallerSummaryCredit(threshold)}</span></td></tr>`).join('');
+      if (!assignmentBody.dataset.installerFilterBound) {
+        assignmentBody.dataset.installerFilterBound = 'true';
+        assignmentBody.addEventListener('click', event => {
+          const link = event.target.closest('.installer-summary-filter-link');
+          if (link) window.filterInstallerAssignmentHistory(link.dataset.installerId);
+        });
+      }
       const totals = summaries.reduce((a, s) => ({ lead:a.lead+s.lead, scheduledLead:a.scheduledLead+s.scheduledLead, assist:a.assist+s.assist, scheduledAssist:a.scheduledAssist+s.scheduledAssist, installationDone:a.installationDone+s.installationDone, installationScheduled:a.installationScheduled+s.installationScheduled, allService:a.allService+s.allService, scheduledAllService:a.scheduledAllService+s.scheduledAllService, total:a.total+s.total, credit:a.credit+s.credit }), { lead:0, scheduledLead:0, assist:0, scheduledAssist:0, installationDone:0, installationScheduled:0, allService:0, scheduledAllService:0, total:0, credit:0 });
       document.getElementById('installer-assignment-tfoot').innerHTML = `<tr><td colspan="3">Total</td><td class="installer-metric-lead">${metric(totals.lead - totals.scheduledLead, totals.scheduledLead)}</td><td class="installer-metric-assist">${metric(totals.assist - totals.scheduledAssist, totals.scheduledAssist)}</td><td>${metric(totals.installationDone, totals.installationScheduled)}</td><td class="installer-metric-service">${metric(totals.allService - totals.scheduledAllService, totals.scheduledAllService)}</td><td>${totals.total}</td><td>—</td></tr>`;
       window.drawInstallerAssignmentHistory();
     };
 
     let installerHistorySelectedIds = null;
+
+    window.filterInstallerAssignmentHistory = function(employeeId) {
+      if (!employeeId) return;
+      installerHistorySelectedIds = new Set([String(employeeId)]);
+      window.drawInstallerAssignmentHistory();
+      const filter = document.getElementById('installer-history-filter');
+      if (filter) filter.open = false;
+      document.querySelector('.installer-history-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
 
     function getInstallerHistorySkus(booking, job) {
       const products = Array.isArray(booking.products) ? booking.products : (() => {

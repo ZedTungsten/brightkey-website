@@ -612,6 +612,56 @@ light-gray portion remains above it.
 >    }, 150);
 >    ```
 
+### 16.1 Standard Modal Close Button
+
+Use the close control established by the Installer Tools modals as the standard
+X button for every modal. Place it in the modal header at the top-right, as the
+last child of the header. The header remains a flex row with
+`justify-content: space-between` and `align-items: center`; do not position the
+button with arbitrary page-relative offsets.
+
+The button has a `36px × 36px` click target and contains a `20px × 20px` inline
+SVG X. It has no visible background or border, uses `var(--text-muted)` at rest,
+and changes to `var(--text-primary)` on hover. Keep the accessible name
+`aria-label="Close"`.
+
+```html
+<button type="button" class="modal-close" aria-label="Close">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M18 6 6 18M6 6l12 12"></path>
+  </svg>
+</button>
+```
+
+```css
+.modal-close {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.modal-close svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+```
+
+Do not use the `×` text character, a smaller icon-only hit area, an emoji, or a
+close button detached from the modal header.
+
 ---
 
 ## 17. Color Standardization for Action Controls & Buttons
@@ -857,3 +907,59 @@ section toolbar.
 Actions requested for the right side of the Page Header Tab belong in that
 topmost header row, aligned opposite the page name. Route-specific actions must
 remain hidden on sibling routes that share the same HTML shell.
+
+---
+
+## 23. Canonical Subtab Component
+
+When the user says **subtab**, they mean the attached secondary tab strip used
+at `/dashboard/ar-ap/owner#monthly` for **Monthly / Accrual**. Treat this route
+as the visual and structural source of truth.
+
+A subtab strip is a full-width surface row directly attached beneath its parent
+tab strip. It must be the next sibling of the primary tabs and remain outside
+the padded page content, table panel, card, toolbar, and scroll container. There
+must be no blank gap, rounded card boundary, or page-content inset between the
+primary tabs and subtabs.
+
+```html
+<div class="drawer-tabs" aria-label="Primary sections">
+  <!-- primary tabs -->
+</div>
+<div class="drawer-tabs page-subtabs" role="tablist" aria-label="Report views">
+  <button class="tab-btn active" role="tab" aria-selected="true">Monthly</button>
+  <button class="tab-btn" role="tab" aria-selected="false">Accrual</button>
+</div>
+<div class="page-content">
+  <!-- controls, table, or active tab panel -->
+</div>
+```
+
+Reuse the existing `.drawer-tabs` and `.tab-btn` component, then apply only the
+compact subtab adjustments established by AR/AP Owner:
+
+```css
+.page-subtabs {
+  margin: 0;
+  padding-left: 2rem;
+  border-top: 0;
+}
+
+.page-subtabs .tab-btn {
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
+  font-size: 0.78rem;
+}
+
+.page-subtabs .tab-btn[aria-selected="true"] {
+  color: var(--cyan-light);
+  border-bottom-color: var(--cyan);
+}
+```
+
+The inherited shared tab contract remains in force: flex row, horizontal
+overflow, `var(--bg-surface)` background, bottom border, nowrap 600-weight
+labels, muted inactive text, transparent 2px underline, cyan active text and
+underline, and `var(--text-secondary)` inactive hover. Use semantic
+`role="tablist"`, `role="tab"`, `aria-selected`, and `aria-controls` when the
+subtabs switch panels in place.

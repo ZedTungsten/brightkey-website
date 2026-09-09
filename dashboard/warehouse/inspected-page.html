@@ -8,7 +8,7 @@
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/dashboard/warehouse/shared.css?v=20260903-1" />
-  <link rel="stylesheet" href="/dashboard/warehouse/inspected.css?v=20260905-cyan-done" />
+  <link rel="stylesheet" href="/dashboard/warehouse/inspected.css?v=20260910-inspection-media-rules" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=2" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
@@ -46,6 +46,13 @@
               <section class="tab-panel active" id="in-stock-panel">
                 <div class="panel">
                   <div class="panel-header">Inspected</div>
+                  <section class="pending-inspections" id="pending-inspections" aria-labelledby="pending-inspections-title" hidden>
+                    <div class="pending-inspections-heading">
+                      <h2 id="pending-inspections-title">Pending Inspections</h2>
+                      <span id="pending-inspections-count"></span>
+                    </div>
+                    <div class="pending-inspection-grid" id="pending-inspection-grid"></div>
+                  </section>
                   <div class="table-responsive">
                     <table class="ledger-table">
                       <thead><tr><th>Code</th><th>SKU</th><th>Media</th><th>Inspected by</th><th>Date Inspected</th><th>Action</th></tr></thead>
@@ -78,8 +85,8 @@
                   </div>
                   <div class="table-responsive">
                     <table class="ledger-table">
-                      <thead><tr><th>Code</th><th>SKU</th><th>Ref Order</th><th>Media</th><th>Inspected by</th><th>Date Inspected</th><th>Date Deployed</th></tr></thead>
-                      <tbody id="deployed-list"><tr><td colspan="7"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading deployed records...</span></div></td></tr></tbody>
+                      <thead><tr><th>Code</th><th>SKU</th><th>Ref Order</th><th>Customer Name</th><th>Media</th><th>Inspected by</th><th>Date Inspected</th><th>Date Deployed</th></tr></thead>
+                      <tbody id="deployed-list"><tr><td colspan="8"><div class="loading-wrapper"><div class="spinner-cyan"></div><span>Loading deployed records...</span></div></td></tr></tbody>
                     </table>
                   </div>
                 </div>
@@ -162,25 +169,60 @@
           <label class="form-label" for="inspect-code">Code</label>
           <input class="form-input" id="inspect-code" type="text" autocomplete="off" placeholder="Select an SKU to generate the code" required readonly />
         </div>
-        <div class="form-group">
-          <label class="form-label" for="inspect-media">Upload Media</label>
-          <div class="media-picker">
-            <input id="inspect-media" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple />
-            <p class="field-help">Up to 5 images or videos. Images: 15 MB each and compressed to JPEG. Videos: 25 MB each.</p>
-            <div class="selected-media-list" id="selected-media-list"></div>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="inspect-employee">Inspected by</label>
-          <select class="form-select" id="inspect-employee" required><option value="" disabled selected hidden>Select Warehouse Member</option></select>
-        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" type="button" data-close="inspect-create-modal">Cancel</button>
-        <button class="btn btn-done" id="inspect-done-btn" type="submit">Done</button>
+        <button class="btn btn-done" id="inspect-done-btn" type="submit">Create</button>
       </div>
     </form>
   </div>
+
+  <div class="modal-overlay" id="inspect-complete-modal" aria-hidden="true" inert>
+    <form class="modal-card" id="inspect-complete-form" novalidate>
+      <div class="modal-header">
+        <div>
+          <h2 class="modal-title">Complete Inspection</h2>
+          <p class="pending-modal-code" id="inspect-complete-code"></p>
+        </div>
+        <button class="modal-close" type="button" data-close="inspect-complete-modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <span class="form-label">Upload Media</span>
+          <p class="field-help inspection-requirements-help">Images: PNG, JPG, or HEIC — up to 15 MB. Videos: MOV or MP4 — up to 15 seconds.</p>
+          <div class="inspection-requirements" id="inspect-complete-requirements" aria-live="polite">
+            <p class="field-help">Loading inspection requirements...</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="inspect-complete-employee">Inspected by</label>
+          <select class="form-select" id="inspect-complete-employee" required><option value="" disabled selected hidden>Select Warehouse Member</option></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close="inspect-complete-modal">Cancel</button>
+        <button class="btn btn-danger" id="inspect-complete-delete" type="button">Delete</button>
+        <button class="btn btn-done" id="inspect-complete-save" type="submit">Complete</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-overlay" id="inspect-pending-delete-modal" aria-hidden="true" inert>
+    <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="inspect-pending-delete-title">
+      <div class="modal-header">
+        <h2 class="modal-title" id="inspect-pending-delete-title">Delete Inspection Request</h2>
+        <button class="modal-close" type="button" data-close="inspect-pending-delete-modal" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-message">Delete this pending inspection request? This cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" type="button" data-close="inspect-pending-delete-modal">Cancel</button>
+        <button class="btn btn-danger" id="inspect-pending-delete-confirm" type="button">Delete Request</button>
+      </div>
+    </div>
+  </div>
+  <select id="inspect-employee" hidden aria-hidden="true"><option value="" disabled selected>Select Warehouse Member</option></select>
 
   <div class="modal-overlay" id="inspect-gallery-modal" aria-hidden="true" inert>
     <div class="modal-card gallery-card" role="dialog" aria-modal="true" aria-labelledby="gallery-title">
@@ -205,6 +247,7 @@
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
   <script src="/dashboard/warehouse/shared.js?v=20260907-pack-badge-orders"></script>
-  <script src="/dashboard/warehouse/inspected.js?v=20260905-deployed-records"></script>
+  <script src="/dashboard/warehouse/inspected-pending.js?v=20260910-pending-delete"></script>
+  <script src="/dashboard/warehouse/inspected.js?v=20260910-pending-cards-5"></script>
 </body>
 </html>
