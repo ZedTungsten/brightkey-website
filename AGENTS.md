@@ -11,18 +11,25 @@ Assume another contributor may be changing the same files on another computer.
 - Make and test changes on the task branch. Stage explicit task files; never use
   broad staging when generated product pages, tenant logos, currency output, or
   other incidental files are present.
+- Keep one active integration branch for a continuing localhost review session.
+  Follow-up changes and recovered fixes must be incorporated into that branch
+  before they are shown. Before each localhost handoff, check the active branch,
+  working tree, recent task branches, and stashes for relevant work, then run one
+  dev server from that exact working tree on the agreed localhost port. Never
+  leave an older server running on the same or another commonly used port where
+  it can be mistaken for the current build.
 - After localhost approval, fetch `origin/main` again and check for both textual
   Git conflicts and logical conflicts where two changes interact without conflict
   markers. Re-run relevant checks after integrating the latest `main`.
-- Push only the task branch and open a pull request. Review its Vercel Preview.
-  Do not merge or push directly to `main` until the user approves the Preview.
-- After Preview approval, confirm the branch is still current, rerun required
-  checks, merge through the pull request, and verify the production deployment.
-- Treat an explicit user instruction to commit, push, and merge as confirmation
-  for that complete scoped Git operation. Do not interrupt the same operation
-  with a redundant confirmation request; continue through the pull request,
-  required checks, Preview review, merge, and production verification. Ask again
-  only if the target, scope, risk, or requested operation materially changes.
+- Push only the task branch and open a pull request. Do not review or approve its
+  Vercel Preview until the user explicitly asks for Preview review.
+- Preview review and pull-request merge are separate user-controlled gates. Do
+  not merge merely because an earlier instruction authorized committing,
+  pushing, or opening the pull request. Merge only after the user explicitly
+  instructs you to merge at that stage.
+- After explicit Preview approval and an explicit merge instruction, confirm the
+  branch is still current, rerun required checks, merge through the pull request,
+  and verify the production deployment.
 - Database changes use version-controlled Supabase migrations. Production
   migrations run from one controlled CI process after merge, never concurrently
   from developer computers or through ad hoc production Dashboard edits.

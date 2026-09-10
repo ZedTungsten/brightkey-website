@@ -42,6 +42,7 @@
     byId('deployed-panel').hidden = !deployed;
     byId('deployed-panel').classList.toggle('active', deployed);
     byId('create-inspect-btn').hidden = assigned || deployed;
+    byId('update-inspected-btn').hidden = assigned || deployed;
     if (deployed) renderDeployedMonth();
   }
 
@@ -888,6 +889,12 @@
         await Promise.all([loadDeployedRecords(), WarehousePage.updateBadgeCounts()]);
         return;
       }
+      window.WarehouseInspectedConnect.init({
+        sb,
+        companyId,
+        showToast,
+        onConnected: () => loadRecords(currentPage)
+      });
       await Promise.all([loadBusinesses(), loadWarehouseMembers(), loadRecords(0)]);
       await window.WarehouseInspectedPending.init({
         sb,
