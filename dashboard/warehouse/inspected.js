@@ -435,6 +435,13 @@
     openModal('inspection-guideline-modal');
   }
 
+  window.WarehouseInspectionGuide = Object.freeze({
+    show(guideline, sku) {
+      selectedGuideline = { ...guideline, sku };
+      renderGuideline();
+    }
+  });
+
   async function loadBusinesses() {
     const [businessResult, orderResult] = await Promise.all([
       sb.from('tenant_businesses').select('id, name').eq('company_id', companyId),
@@ -866,6 +873,7 @@
       companyId = company?.id || null;
       if (!companyId) throw new Error('Company context is unavailable.');
       WarehousePage.companyId = companyId;
+      await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
       if (activeView === 'deployed') {
         await Promise.all([loadDeployedRecords(), WarehousePage.updateBadgeCounts()]);
         return;

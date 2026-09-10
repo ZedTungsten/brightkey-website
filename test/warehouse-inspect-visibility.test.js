@@ -31,7 +31,7 @@ test('Inspected uses clean In Stock and Deployed subtabs with a route-gated mont
   assert.match(html, /id="deployed-prev-month"[\s\S]*?id="deployed-month-label"[\s\S]*?id="deployed-next-month"/);
   assert.match(html, /class="month-picker" aria-label="Deployed month"/);
   assert.match(read('dashboard/warehouse/inspected.css'), /\.month-picker button \{[^}]*width: 42px;[^}]*height: 42px;[^}]*border: 0;/);
-  assert.match(script, /if \(activeView === 'deployed'\) \{[\s\S]*?await Promise\.all\(\[loadDeployedRecords\(\), WarehousePage\.updateBadgeCounts\(\)\]\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?Promise\.all\(\[loadBusinesses\(\), loadWarehouseMembers\(\), loadRecords\(0\)\]\)/);
+  assert.match(script, /await WarehousePage\.loadWarehouseTabs\(authInfo\.tenantId\);[\s\S]*?if \(activeView === 'deployed'\) \{[\s\S]*?await Promise\.all\(\[loadDeployedRecords\(\), WarehousePage\.updateBadgeCounts\(\)\]\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?Promise\.all\(\[loadBusinesses\(\), loadWarehouseMembers\(\), loadRecords\(0\)\]\)/);
   assert.doesNotMatch(script, /refreshTabBadges|badge\.style\.display = 'inline-block'/);
   const routes = JSON.parse(config);
   assert.equal(routes.redirects.some(route => route.source === '/dashboard/warehouse/inspected'), false);
@@ -100,11 +100,30 @@ test('Complete Inspection uses the saved checklist with independent required upl
   assert.match(html, /id="inspect-complete-requirements"/);
   assert.doesNotMatch(html, /id="inspect-complete-media"/);
   assert.match(pending, /\.from\('global_settings'\)[\s\S]*?\.eq\('company_id', companyId\)[\s\S]*?\.eq\('key', 'inspection_checklist'\)/);
-  assert.match(pending, /requirementUploads\.every\(item => !item\.requirement\.required \|\| \(item\.status === 'done' && item\.url\)\)/);
+  assert.match(pending, /const requiredUploads = requirementUploads\.filter\(item => item\.requirement\.required\)/);
+  assert.match(pending, /const missingRequiredUploads = requiredUploads\.filter\(item => item\.status !== 'done' \|\| !item\.url\)/);
+  assert.match(pending, /const requiredUploadInProgress = missingRequiredUploads\.some\(item => item\.status === 'uploading'\)/);
+  assert.match(pending, /requirementUploads[\s\S]*?\.filter\(item => item\.status === 'done' && item\.url\)[\s\S]*?\.map\(item => item\.url\)/);
+  assert.doesNotMatch(pending, /Wait for each media upload to finish/);
   assert.match(pending, /item\.requirement\.required \? 'Required' : 'Optional'/);
   assert.match(pending, /item\.status = 'uploading'[\s\S]*?item\.url = await uploadMedia\(file\)[\s\S]*?item\.status = 'done'/);
   assert.match(pending, /Upload failed\. Retry this item\./);
   assert.match(styles, /\.inspection-requirement-progress[\s\S]*?transition: width \.18s ease/);
+});
+
+test('Complete Inspection fits five desktop cards and reuses the selected SKU QA guide', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const script = read('dashboard/warehouse/inspected.js');
+  const pending = read('dashboard/warehouse/inspected-pending.js');
+  const styles = read('dashboard/warehouse/inspected.css');
+  assert.match(html, /class="modal-card complete-inspection-card" id="inspect-complete-form"/);
+  assert.match(html, /id="inspect-complete-code"[\s\S]*?id="inspect-complete-guide-action" hidden[\s\S]*?>View QA Guide</);
+  assert.match(styles, /\.modal-card\.complete-inspection-card \{ width: min\(1440px,100%\); \}/);
+  assert.match(styles, /#inspect-complete-requirements \{ grid-template-columns: repeat\(5,minmax\(0,1fr\)\); \}/);
+  assert.match(pending, /\.from\('qa_guides'\)[\s\S]*?\.eq\('company_id', companyId\)[\s\S]*?\.in\('product_id', productIds\)[\s\S]*?\.limit\(MAX_PENDING\)/);
+  assert.match(pending, /inspect-complete-guide-action'\)\.hidden = !record\.qa_guide/);
+  assert.match(pending, /WarehouseInspectionGuide\?\.show\(selectedRecord\.qa_guide, selectedRecord\.sku\)/);
+  assert.match(script, /window\.WarehouseInspectionGuide = Object\.freeze\([\s\S]*?selectedGuideline = \{ \.\.\.guideline, sku \}[\s\S]*?renderGuideline\(\)/);
 });
 
 test('Complete Inspection enforces the documented image and video limits', () => {
@@ -189,8 +208,10 @@ test('In Stock uses bounded server pagination instead of Load More', () => {
   assert.match(script, /\{ count: 'exact' \}/);
 });
 
-test('Shared Pack badge counts both direct reservations and legacy inspect records', () => {
-  assert.match(sharedSource, /const packCount = [\s\S]*?t\.status === 'inspect'[\s\S]*?t\.status === 'reserved'[\s\S]*?this\.bookings\.some/);
+test('Shared Pack badge uses the authoritative warehouse count RPC', () => {
+  assert.match(sharedSource, /rpc\('get_warehouse_tab_counts'/);
+  assert.match(sharedSource, /Number\(row\.pack_count \|\| 0\)/);
+  assert.doesNotMatch(sharedSource, /const packCount =|getPackCount/);
   const migration = read('supabase/migrations/20260903052000_route_booking_reservations_to_pack.sql');
   assert.match(migration, /booking\.order_no = tx\.reference_id/);
   assert.match(migration, /WHERE tx\.status = 'inspect'[\s\S]*?tx\.status = 'reserved'/);

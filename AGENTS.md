@@ -488,6 +488,33 @@ renderer from that route while preserving its exact behavior. Positive counts
 display and zero counts remain hidden unless the shared renderer itself is
 intentionally changed for every consuming tab.
 
+#### Warehouse Workflow Badges Have One Authoritative Count
+
+Every current or future page and subpage under `/dashboard/warehouse/` must use
+`WarehousePage.updateBadgeCounts()` and the company/warehouse-scoped
+`get_warehouse_tab_counts` RPC as the sole source for Pack, Dispatch, and Receive
+badges. A page may not derive a navigation badge from its locally loaded rows,
+replace an RPC value with its rendered table length, add a route-specific
+fallback, or maintain a second status predicate. Workflow changes that affect a
+badge must update the RPC, every affected destination-list regression test, and
+the shared badge tests together. All warehouse routes must reference the same
+cache-busted `shared.js` version. Every route, including a subpage without a
+warehouse dropdown, must call `WarehousePage.loadWarehouseTabs(tenantId)` before
+counting so it resolves the same saved or default warehouse context. Positive
+counts display; zero counts remain hidden through the shared renderer.
+
+#### Ship Workflow Badges Have One Authoritative Count
+
+Every current or future page and subpage under `/dashboard/ship/` must use
+`ShipTabCounts.update()` and the company-scoped `get_ship_tab_counts` RPC as the
+sole source for Send and Receive badges. Do not copy queue filters into another
+page, calculate badges from a page's locally loaded transactions or bookings, or
+replace an RPC count with a rendered table length. Changes to Send or Receive
+eligibility must update the RPC, the destination-list regression coverage, and
+the shared Ship badge tests together. All Ship routes must load the same
+cache-busted `/dashboard/ship/tab-counts.js` version; positive counts display and
+zero counts remain hidden through that shared renderer.
+
 ### 8.2 Canonical Saved Month Navigator
 When the user requests the saved month navigator, use the established
 `.month-picker` component and position it on the right side of the panel header.

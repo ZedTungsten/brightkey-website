@@ -6,6 +6,7 @@ const page = fs.readFileSync(new URL('../dashboard/warehouse/receive.html', impo
 const shared = fs.readFileSync(new URL('../dashboard/warehouse/shared.js', import.meta.url), 'utf8');
 const migration = fs.readFileSync(new URL('../supabase/migrations/20260909042350_receive_unreceived_queue.sql', import.meta.url), 'utf8');
 const statusMigration = fs.readFileSync(new URL('../supabase/migrations/20260909043756_allow_unreceived_inventory_transaction_status.sql', import.meta.url), 'utf8');
+const countMigration = fs.readFileSync(new URL('../supabase/migrations/20260910021537_unify_warehouse_tab_counts.sql', import.meta.url), 'utf8');
 
 test('warehouse Receive loads and groups detached unreceived lines with quantity and issue date', () => {
   assert.match(page, /\['ordered', 'dispatched', 'returned', 'unreceived'\]/);
@@ -37,10 +38,10 @@ test('migration preserves original shipment provenance and indexes the unreceive
   assert.match(migration, /where status = 'unreceived'/);
 });
 
-test('shared Receive badge includes unreceived lines without changing zero-badge behavior', () => {
-  assert.match(shared, /const getUnreceivedCount = \(\) =>/);
-  assert.match(shared, /Number\(row\.receive_count \|\| 0\) \+ getUnreceivedCount\(\)/);
-  assert.match(shared, /if \(t\.status === 'unreceived'\) return true/);
+test('authoritative Receive badge includes unreceived lines without client-side double counting', () => {
+  assert.match(countMigration, /tx\.status = 'unreceived'/);
+  assert.match(shared, /Number\(row\.receive_count \|\| 0\)/);
+  assert.doesNotMatch(shared, /getUnreceivedCount|receive_count \|\| 0\) \+/);
 });
 
 test('transaction status constraint preserves existing values and permits unreceived workflow values', () => {

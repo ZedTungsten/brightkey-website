@@ -19,9 +19,8 @@ test('warehouse workflow status uses the same timestamp precedence as All Orders
   assert.equal(status({ status: 'inspect', timestamp_inspect: '2026-09-06T12:00:00Z' }), 'inspect');
 });
 
-test('Pack queue, Pack action, and Pack badge use authoritative workflow status', () => {
+test('Pack queue and Pack action use authoritative workflow status', () => {
   assert.match(pack, /const workflowStatus = window\.getInventoryTransactionWorkflowStatus\(transaction\)/);
   assert.match(pack, /includes\(window\.getInventoryTransactionWorkflowStatus\(t\)\)/);
-  assert.match(shared, /const getPackCount = \(\) =>[\s\S]*window\.getInventoryTransactionWorkflowStatus\(transaction\)/);
-  assert.match(pack, /shared\.js\?v=20260910-authoritative-workflow-status/);
+  assert.match(pack, /shared\.js\?v=20260910-unified-tab-counts/);
 });
