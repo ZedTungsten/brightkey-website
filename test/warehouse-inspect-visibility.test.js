@@ -18,28 +18,56 @@ test('Warehouse Requests is removed and its legacy routes safely redirect to Pac
   assert.doesNotMatch(sharedSource, /badge-count-inspect|inspect-list/);
 });
 
-test('Inspected uses clean In Stock and Deployed subtabs with a route-gated month navigator', () => {
+test('Inspected uses clean In Stock, Assigned, and Deployed subtabs with a route-gated month navigator', () => {
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
   const config = read('vercel.json');
   assert.match(html, /href="\/dashboard\/warehouse\/inspected\/in-stock">In Stock/);
+  assert.match(html, /href="\/dashboard\/warehouse\/inspected\/assigned">Assigned/);
   assert.match(html, /href="\/dashboard\/warehouse\/inspected\/deployed">Deployed/);
   assert.match(html, /href="\/css\/style\.css"/);
   assert.match(html, /href="\/dashboard\/warehouse\/shared\.css\?v=/);
   assert.match(html, /href="\/dashboard\/warehouse\/inspected\.css\?v=/);
   assert.doesNotMatch(html, /(?:href|src)="(?:\.\.\/|shared\.css|inspected\.css)/);
   assert.match(html, /id="deployed-prev-month"[\s\S]*?id="deployed-month-label"[\s\S]*?id="deployed-next-month"/);
+  assert.doesNotMatch(html, /<div class="panel-header">Inspected<\/div>/);
   assert.match(html, /class="month-picker" aria-label="Deployed month"/);
-  assert.match(read('dashboard/warehouse/inspected.css'), /\.month-picker button \{[^}]*width: 42px;[^}]*height: 42px;[^}]*border: 0;/);
+  const styles = read('dashboard/warehouse/inspected.css');
+  assert.match(styles, /\.month-picker button \{[^}]*width: 42px;[^}]*height: 42px;[^}]*border: 0;/);
+  assert.match(styles, /\.pending-inspection-card \{[^}]*grid-template-columns: 56px minmax\(0,1fr\);[^}]*padding: \.5rem \.65rem;/);
+  assert.match(styles, /\.pending-inspection-first-line \{[^}]*display: flex;[^}]*align-items: center;/);
+  assert.match(styles, /\.pending-inspection-code \{[^}]*font-size: \.78rem;/);
+  assert.match(styles, /\.ledger-table tbody td:first-child \{ font-family: var\(--font-sans\);/);
+  assert.doesNotMatch(styles, /font-family: var\(--font-mono\)/);
+  assert.match(read('dashboard/warehouse/inspected-pending.js'), /firstLine\.append\(sku, code\);[\s\S]*?copy\.append\(firstLine, date\);/);
   assert.match(script, /await WarehousePage\.loadWarehouseTabs\(authInfo\.tenantId\);[\s\S]*?if \(activeView === 'deployed'\) \{[\s\S]*?await Promise\.all\(\[loadDeployedRecords\(\), WarehousePage\.updateBadgeCounts\(\)\]\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?Promise\.all\(\[loadBusinesses\(\), loadWarehouseMembers\(\), loadRecords\(0\)\]\)/);
   assert.doesNotMatch(script, /refreshTabBadges|badge\.style\.display = 'inline-block'/);
   const routes = JSON.parse(config);
   assert.equal(routes.redirects.some(route => route.source === '/dashboard/warehouse/inspected'), false);
   assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/in-stock')?.destination, '/dashboard/warehouse/inspected-page');
+  assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/assigned')?.destination, '/dashboard/warehouse/inspected-page');
   assert.match(script, /normalizedPath === '\/dashboard\/warehouse\/inspected'[\s\S]*?window\.location\.replace\(`\/dashboard\/warehouse\/inspected\/in-stock/);
   assert.equal(routes.rewrites.find(route => route.source === '/dashboard/warehouse/inspected/deployed')?.destination, '/dashboard/warehouse/inspected-page');
   assert.doesNotMatch(script, /searchParams\.get\('view'\)|requestedView|history\.replaceState/);
   assert.match(script, /window\.location\.pathname[\s\S]*?endsWith\('\/deployed'\)/);
+});
+
+test('Assigned lists allocated customer inspections until dispatch using a bounded active-route query', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const page = read('dashboard/warehouse/inspected.js');
+  const assigned = read('dashboard/warehouse/inspected-assigned.js');
+  assert.match(html, /id="assigned-panel"[\s\S]*?<th>Code<\/th><th>SKU<\/th><th>Ref Order<\/th><th>Customer Name<\/th><th>Media<\/th><th>Inspected by<\/th><th>Date Inspected<\/th><th>Date Assigned<\/th>/);
+  assert.match(page, /activeView === 'assigned'[\s\S]*?WarehouseInspectedAssigned\.init/);
+  assert.match(assigned, /\.from\('warehouse_inspection_allocations'\)/);
+  assert.match(assigned, /transaction:inventory_transactions!inner/);
+  assert.match(assigned, /inspection:warehouse_inspections!inner/);
+  assert.match(assigned, /\.eq\('company_id', companyId\)/);
+  assert.match(assigned, /\.eq\('transaction\.type', 'customer_order'\)/);
+  assert.match(assigned, /\.is\('transaction\.timestamp_dispatched', null\)/);
+  assert.match(assigned, /\.is\('transaction\.timestamp_received', null\)/);
+  assert.match(assigned, /\.is\('transaction\.timestamp_cancelled', null\)/);
+  assert.match(assigned, /\.range\(start, start \+ PAGE_SIZE - 1\)/);
+  assert.match(assigned, /allocated_at: allocation\.allocated_at/);
 });
 
 test('New Inspect exposes a company-scoped guideline only for the exact selected SKU', () => {

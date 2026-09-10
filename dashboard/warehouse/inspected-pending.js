@@ -101,6 +101,8 @@ window.WarehouseInspectedPending = (() => {
       card.setAttribute('aria-label', `Complete inspection ${record.code}`);
       const copy = document.createElement('span');
       copy.className = 'pending-inspection-copy';
+      const firstLine = document.createElement('span');
+      firstLine.className = 'pending-inspection-first-line';
       const sku = document.createElement('strong');
       sku.className = 'pending-inspection-sku';
       sku.textContent = record.sku;
@@ -110,7 +112,8 @@ window.WarehouseInspectedPending = (() => {
       const code = document.createElement('span');
       code.className = 'pending-inspection-code';
       code.textContent = record.code;
-      copy.append(sku, date, code);
+      firstLine.append(sku, code);
+      copy.append(firstLine, date);
       card.append(cardImage(record), copy);
       card.addEventListener('click', () => openRecord(record));
       grid.appendChild(card);

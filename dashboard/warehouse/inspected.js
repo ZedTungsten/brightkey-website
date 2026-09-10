@@ -23,23 +23,27 @@
   let guidelineRequestId = 0;
   let generatedCodeSku = '';
   const modalReturnFocus = new WeakMap();
-  const activeView = window.location.pathname.replace(/\/+$/, '').endsWith('/deployed')
-    ? 'deployed'
-    : 'in-stock';
+  const activePath = window.location.pathname.replace(/\/+$/, '');
+  const activeView = activePath.endsWith('/assigned') ? 'assigned' : activePath.endsWith('/deployed') ? 'deployed' : 'in-stock';
   let deployedMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   const byId = id => document.getElementById(id);
 
   function renderActiveView() {
+    const assigned = activeView === 'assigned';
     const deployed = activeView === 'deployed';
-    byId('in-stock-subtab').classList.toggle('active', !deployed);
+    byId('in-stock-subtab').classList.toggle('active', !assigned && !deployed);
+    byId('assigned-subtab').classList.toggle('active', assigned);
     byId('deployed-subtab').classList.toggle('active', deployed);
-    byId('in-stock-panel').hidden = deployed;
-    byId('in-stock-panel').classList.toggle('active', !deployed);
+    byId('in-stock-panel').hidden = assigned || deployed;
+    byId('in-stock-panel').classList.toggle('active', !assigned && !deployed);
+    byId('assigned-panel').hidden = !assigned;
+    byId('assigned-panel').classList.toggle('active', assigned);
     byId('deployed-panel').hidden = !deployed;
     byId('deployed-panel').classList.toggle('active', deployed);
-    byId('create-inspect-btn').hidden = deployed;
-    renderDeployedMonth();
+    byId('create-inspect-btn').hidden = assigned || deployed;
+    byId('update-inspected-btn').hidden = assigned || deployed;
+    if (deployed) renderDeployedMonth();
   }
 
   function renderDeployedMonth() {
@@ -874,10 +878,23 @@
       if (!companyId) throw new Error('Company context is unavailable.');
       WarehousePage.companyId = companyId;
       await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
+      if (activeView === 'assigned') {
+        await Promise.all([
+          window.WarehouseInspectedAssigned.init({ sb, companyId, openGallery, showToast }),
+          WarehousePage.updateBadgeCounts()
+        ]);
+        return;
+      }
       if (activeView === 'deployed') {
         await Promise.all([loadDeployedRecords(), WarehousePage.updateBadgeCounts()]);
         return;
       }
+      window.WarehouseInspectedConnect.init({
+        sb,
+        companyId,
+        showToast,
+        onConnected: () => loadRecords(currentPage)
+      });
       await Promise.all([loadBusinesses(), loadWarehouseMembers(), loadRecords(0)]);
       await window.WarehouseInspectedPending.init({
         sb,
