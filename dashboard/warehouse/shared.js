@@ -96,8 +96,6 @@ window.WarehousePage = {
   },
 
   deliveryBookings: [],
-  visibleDispatchOrderCount: null,
-
   _activeTransactions: [],
   get activeTransactions() {
     return this._activeTransactions;
@@ -214,27 +212,24 @@ window.WarehousePage = {
 
       if (error) throw error;
       this.fulfillmentWarehouses = (data || []).filter(w => w.is_active);
-
-      const dropdown = document.getElementById('wh-select-dropdown');
-      if (!dropdown) return;
-
       if (this.fulfillmentWarehouses.length === 0) {
-        dropdown.style.display = 'none';
         this.activeWarehouseId = null;
+        const emptyDropdown = document.getElementById('wh-select-dropdown');
+        if (emptyDropdown) emptyDropdown.style.display = 'none';
         return;
       }
-
-      dropdown.style.display = 'inline-block';
-      dropdown.innerHTML = this.fulfillmentWarehouses.map(wh => `
-        <option value="${wh.id}">${this.escFulfillment(wh.name)}</option>
-      `).join('');
-
       const storedWhId = localStorage.getItem('active_warehouse_id');
       if (storedWhId && this.fulfillmentWarehouses.some(w => w.id === storedWhId)) {
         this.activeWarehouseId = storedWhId;
       } else {
         this.activeWarehouseId = this.fulfillmentWarehouses[0]?.id || null;
       }
+      const dropdown = document.getElementById('wh-select-dropdown');
+      if (!dropdown) return;
+      dropdown.style.display = 'inline-block';
+      dropdown.innerHTML = this.fulfillmentWarehouses.map(wh => `
+        <option value="${wh.id}">${this.escFulfillment(wh.name)}</option>
+      `).join('');
       dropdown.value = this.activeWarehouseId;
     } catch (err) {
       console.warn('Could not load warehouse dropdown:', err.message);
@@ -277,34 +272,11 @@ window.WarehousePage = {
     }
   },
 
+  _badgeCountRequest: null,
+  _badgeCountRequestKey: '',
+
   // 10. Update Badge Counts
   updateBadgeCounts: async function() {
-    const allProds = this.allProducts || [];
-    const getPackCount = () => [...new Set(this.activeTransactions.filter(transaction =>
-      !String(transaction.reference_id || '').toUpperCase().startsWith('SND-DMG-') &&
-      (window.getInventoryTransactionWorkflowStatus(transaction) === 'inspect'
-        || (window.getInventoryTransactionWorkflowStatus(transaction) === 'reserved'
-          && this.bookings.some(booking => booking.order_no === transaction.reference_id))) &&
-      transaction.type === 'customer_order' &&
-      !window.isNonInventoryItem(transaction.sku, allProds.find(product => product.sku === transaction.sku))
-    ).map(transaction => transaction.reference_id))].length;
-    const getDispatchCount = () => {
-      if (document.getElementById('dispatch-list') && Number.isInteger(this.visibleDispatchOrderCount)) {
-        return this.visibleDispatchOrderCount;
-      }
-      return [...new Set(window.getDispatchableOrderTransactions(
-        this.activeTransactions,
-        this.bookings,
-        allProds
-      ).map(transaction => transaction.reference_id))].length;
-    };
-    const getUnreceivedCount = () => this.activeTransactions.filter(transaction => {
-      const matchesWarehouse = this.activeWarehouseId
-        ? transaction.warehouse_id === this.activeWarehouseId
-        : !transaction.warehouse_id;
-      return matchesWarehouse && transaction.status === 'unreceived';
-    }).length;
-
     const renderBadges = (receive, pack, dispatch) => {
       const badges = [
         { id: 'badge-count-receive', count: receive },
@@ -325,55 +297,27 @@ window.WarehousePage = {
       });
     };
 
-    // Attempt efficient server-side RPC counting
-    if (this.sb && this.companyId) {
-      try {
-        const { data, error } = await this.sb.rpc('get_warehouse_tab_counts', {
-          p_company_id: this.companyId,
-          p_warehouse_id: this.activeWarehouseId || null
-        });
-
-        if (!error && data && data.length > 0) {
-          const row = data[0];
-          const dispatchCount = document.getElementById('dispatch-list')
-            ? getDispatchCount()
-            : Number(row.dispatch_count || 0);
-          renderBadges(
-            Number(row.receive_count || 0) + getUnreceivedCount(),
-            getPackCount(),
-            dispatchCount
-          );
-          return;
-        }
-      } catch (err) {
-        console.warn('Server-side tab counting RPC unavailable, using fallback:', err);
-      }
+    if (!this.sb || !this.companyId) return;
+    const requestKey = `${this.companyId}:${this.activeWarehouseId || 'unassigned'}`;
+    if (!this._badgeCountRequest || this._badgeCountRequestKey !== requestKey) {
+      this._badgeCountRequestKey = requestKey;
+      this._badgeCountRequest = Promise.resolve(this.sb.rpc('get_warehouse_tab_counts', {
+        p_company_id: this.companyId,
+        p_warehouse_id: this.activeWarehouseId || null
+      })).finally(() => {
+        if (this._badgeCountRequestKey === requestKey) this._badgeCountRequest = null;
+      });
     }
-
-    // Client-side fallback if RPC is pending migration
-    const receiveCount = this.activeTransactions.filter(t => {
-      const matchesWarehouse = this.activeWarehouseId 
-        ? t.warehouse_id === this.activeWarehouseId 
-        : (t.warehouse_id === null || !t.warehouse_id);
-      if (!matchesWarehouse) return false;
-
-      if (t.status === 'unreceived') return true;
-
-      const isIncoming = (t.reference_id && (t.reference_id.startsWith('RCV-') || t.reference_id.startsWith('SUP-')));
-      if (isIncoming) {
-        if (!['ordered', 'dispatched'].includes(t.status)) return false;
-        const isBooked = (this.deliveryBookings || []).some(db => db.reference_id === t.reference_id);
-        return isBooked;
-      }
-
-      if (!['ordered', 'returned'].includes(t.status)) return false;
-      return t.type !== 'supplier_order';
-    }).length + (this.warehouseTransfers || []).filter(tr => tr.status === 'approved' && tr.to_warehouse_id === this.activeWarehouseId).length;
-    const packCount = getPackCount();
-    
-    const dispatchCount = getDispatchCount();
-
-    renderBadges(receiveCount, packCount, dispatchCount);
+    const { data, error } = await this._badgeCountRequest;
+    if (this._badgeCountRequestKey !== requestKey) return;
+    if (error) throw error;
+    const row = data?.[0];
+    if (!row) throw new Error('Warehouse tab counts returned no result.');
+    renderBadges(
+      Number(row.receive_count || 0),
+      Number(row.pack_count || 0),
+      Number(row.dispatch_count || 0)
+    );
   },
 
   // 11. AutoSync Bookings Background Launcher

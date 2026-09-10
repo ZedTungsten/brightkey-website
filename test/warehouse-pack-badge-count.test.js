@@ -13,11 +13,11 @@ const warehousePages = [
   'transfer.html'
 ].map(file => fs.readFileSync(new URL(`../dashboard/warehouse/${file}`, import.meta.url), 'utf8'));
 
-test('Warehouse Pack badge always uses the visible unique-order predicate', () => {
-  assert.match(shared, /const getPackCount = \(\) => \[\.\.\.new Set/);
-  assert.match(shared, /renderBadges\([\s\S]*Number\(row\.receive_count \|\| 0\),[\s\S]*getPackCount\(\),[\s\S]*dispatchCount/);
-  assert.doesNotMatch(shared, /document\.getElementById\('pack-list'\) \? getPackCount\(\) : Number\(row\.pack_count/);
+test('Every warehouse page renders Pack from the one authoritative RPC response', () => {
+  assert.match(shared, /rpc\('get_warehouse_tab_counts'/);
+  assert.match(shared, /Number\(row\.receive_count \|\| 0\),[\s\S]*Number\(row\.pack_count \|\| 0\),[\s\S]*Number\(row\.dispatch_count \|\| 0\)/);
+  assert.doesNotMatch(shared, /getPackCount|visibleDispatchOrderCount|getUnreceivedCount/);
   warehousePages.forEach(page => {
-    assert.match(page, /shared\.js\?v=20260907-pack-badge-orders/);
+    assert.match(page, /shared\.js\?v=20260910-unified-tab-counts/);
   });
 });

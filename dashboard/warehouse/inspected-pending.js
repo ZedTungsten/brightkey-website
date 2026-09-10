@@ -80,6 +80,7 @@ window.WarehouseInspectedPending = (() => {
     selectedRecord = record;
     resetRequirementUploads();
     byId('inspect-complete-code').textContent = record.code;
+    byId('inspect-complete-guide-action').hidden = !record.qa_guide;
     byId('inspect-complete-form').reset();
     byId('inspect-complete-requirements').classList.remove('form-error');
     byId('inspect-complete-employee').classList.remove('form-error');
@@ -130,16 +131,31 @@ window.WarehouseInspectedPending = (() => {
     if (error) throw error;
     const productIds = [...new Set((data || []).map(record => record.product_id).filter(Boolean))];
     let productById = new Map();
+    let guideByProductId = new Map();
     if (productIds.length) {
-      const { data: products, error: productError } = await sb.from('products')
-        .select('id, image_main')
-        .eq('company_id', companyId)
-        .in('id', productIds)
-        .limit(MAX_PENDING);
+      const [productResult, guideResult] = await Promise.all([
+        sb.from('products')
+          .select('id, image_main')
+          .eq('company_id', companyId)
+          .in('id', productIds)
+          .limit(MAX_PENDING),
+        sb.from('qa_guides')
+          .select('id, product_id, general_notes, parts')
+          .eq('company_id', companyId)
+          .in('product_id', productIds)
+          .limit(MAX_PENDING)
+      ]);
+      const { data: products, error: productError } = productResult;
       if (productError) throw productError;
       productById = new Map((products || []).map(product => [product.id, product]));
+      if (guideResult.error) console.error(guideResult.error);
+      else guideByProductId = new Map((guideResult.data || []).map(guide => [guide.product_id, guide]));
     }
-    pending = (data || []).map(record => ({ ...record, image_main: productById.get(record.product_id)?.image_main || '' }));
+    pending = (data || []).map(record => ({
+      ...record,
+      image_main: productById.get(record.product_id)?.image_main || '',
+      qa_guide: guideByProductId.get(record.product_id) || null
+    }));
     render();
   }
 
@@ -350,22 +366,29 @@ window.WarehouseInspectedPending = (() => {
     if (!selectedRecord) return;
     const employeeSelect = byId('inspect-complete-employee');
     const employee = employeeSelect.selectedOptions[0];
-    const uploadsComplete = requirementUploads.length > 0 && requirementUploads.every(item => !item.requirement.required || (item.status === 'done' && item.url));
-    const uploadInProgress = requirementUploads.some(item => item.status === 'uploading');
+    const requiredUploads = requirementUploads.filter(item => item.requirement.required);
+    const missingRequiredUploads = requiredUploads.filter(item => item.status !== 'done' || !item.url);
+    const requiredUploadInProgress = missingRequiredUploads.some(item => item.status === 'uploading');
     employeeSelect.classList.toggle('form-error', !employee?.value);
-    byId('inspect-complete-requirements').classList.toggle('form-error', !uploadsComplete);
-    if (uploadInProgress) {
-      showToast('Wait for each media upload to finish.', true);
+    byId('inspect-complete-requirements').classList.toggle('form-error', missingRequiredUploads.length > 0);
+    if (requiredUploadInProgress) {
+      showToast('Wait for the required media upload to finish.', true);
       return;
     }
-    if (!employee?.value || !uploadsComplete) {
-      showToast('Upload every required inspection media item and select a Warehouse Member.', true);
+    if (missingRequiredUploads.length) {
+      showToast('Upload every required inspection media item.', true);
+      return;
+    }
+    if (!employee?.value) {
+      showToast('Select a Warehouse Member.', true);
       return;
     }
     const button = byId('inspect-complete-save');
     button.disabled = true;
     button.textContent = 'Saving...';
-    const uploaded = requirementUploads.map(item => item.url).filter(Boolean);
+    const uploaded = requirementUploads
+      .filter(item => item.status === 'done' && item.url)
+      .map(item => item.url);
     try {
       const { data, error } = await sb.from('warehouse_inspections')
         .update({
@@ -466,6 +489,9 @@ window.WarehouseInspectedPending = (() => {
     byId('inspect-complete-employee').addEventListener('change', event => event.target.classList.remove('form-error'));
     byId('inspect-complete-form').addEventListener('submit', complete);
     byId('inspect-complete-delete').addEventListener('click', confirmDelete);
+    byId('inspect-complete-guide-btn').addEventListener('click', () => {
+      if (selectedRecord?.qa_guide) window.WarehouseInspectionGuide?.show(selectedRecord.qa_guide, selectedRecord.sku);
+    });
     byId('inspect-pending-delete-confirm').addEventListener('click', deletePendingRequest);
     await Promise.all([loadRequirements(), refresh()]);
   }
