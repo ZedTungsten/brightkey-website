@@ -17,6 +17,12 @@ test('cancelled product lines are excluded from commission totals and display', 
   assert.ok(cancelledLineGuards.length >= 3);
 });
 
+test('commission rows retain live active products while calculations use the locked basis', () => {
+  assert.match(source, /dbBookings = bookingsRes\.data \|\| \[\];/);
+  assert.doesNotMatch(source, /dbBookings = \(bookingsRes\.data \|\| \[\]\)\.map\(getCommissionBasisBooking\)/);
+  assert.match(source, /function getBookingEligibleCentavos\(b,[\s\S]*?b = getCommissionBasisBooking\(b\);/);
+});
+
 test('receipt actions fetch the latest company-scoped booking before rendering', () => {
   assert.match(source, /window\.openViewReceiptById = async function\(bookingId\)[\s\S]*?window\.open\('', '_blank'\)[\s\S]*?from\('installation_bookings'\)[\s\S]*?\.eq\('company_id', currentCompanyId\)[\s\S]*?\.eq\('id', bookingId\)[\s\S]*?\.single\(\)/);
   assert.doesNotMatch(source, /window\.openViewReceiptById = async function\(bookingId\) \{\s*const b = dbBookings\.find/);
