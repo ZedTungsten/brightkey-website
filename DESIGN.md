@@ -28,6 +28,16 @@ If repeated CSS adjustments do not close the visual gap, stop and inspect the
 rendered markup. This is usually evidence of a structural mismatch, not a need
 for another override.
 
+### Style Copying Is One-Way
+
+When the user asks to copy a style from an existing page or component, treat the
+named source as a read-only visual reference. Apply changes only to the target
+page or component. Do not edit, restyle, resize, refactor, or otherwise update
+the source page as part of the copying request unless the user separately and
+explicitly asks for changes to that source. Verify both pages afterward: the
+target must adopt the requested styling and the source must remain visually and
+functionally unchanged.
+
 ---
 
 ## 1. UI Alerts & Confirmation Dialogs

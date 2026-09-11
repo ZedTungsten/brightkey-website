@@ -200,13 +200,13 @@ function renderExplorer() {
 
   filtered.forEach(item => {
     const card = document.createElement('div');
-    card.className = item.type === 'folder' ? 'item-card folder-card' : 'item-card';
+    card.className = 'item-card';
     const isRestrictedFolder = isFolderEffectivelyRestricted(item);
     const folderColor = item.type === 'folder' ? FOLDER_COLORS[item.folder_color] : null;
     
     let iconHtml = '';
     if (item.type === 'folder') {
-      const folderSize = explorerViewMode === 'list' ? 20 : 48;
+      const folderSize = explorerViewMode === 'list' ? 20 : 32;
       const folderFill = folderColor?.background || 'none';
       const folderStroke = folderColor?.border || 'currentColor';
       iconHtml = isRestrictedFolder

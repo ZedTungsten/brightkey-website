@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const shared = fs.readFileSync(new URL('../dashboard/warehouse/shared.js', import.meta.url), 'utf8');
 const warehousePages = [
-  'damaged.html',
+  'defective.html',
   'dispatch.html',
   'inspected-page.html',
   'pack.html',
