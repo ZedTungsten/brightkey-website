@@ -214,6 +214,21 @@
           .maybeSingle();
 
         if (!refreshError && latestBooking) {
+          const { data: receivedDelivery, error: deliveryError } = await sb
+            .from('delivery_bookings')
+            .select('received_photo_url, status, delivered_at')
+            .eq('company_id', currentCompanyId)
+            .eq('reference_id', latestBooking.order_no)
+            .not('received_photo_url', 'is', null)
+            .order('delivered_at', { ascending: false, nullsFirst: false })
+            .limit(1)
+            .maybeSingle();
+          if (!deliveryError && receivedDelivery
+              && (String(receivedDelivery.status || '').toLowerCase() === 'delivered' || receivedDelivery.delivered_at)) {
+            latestBooking._received_photo_url = receivedDelivery.received_photo_url || '';
+          } else if (deliveryError) {
+            console.warn('Could not refresh received delivery proof:', deliveryError.message);
+          }
           const bookingIndex = dbBookings.findIndex(booking => booking.id === id);
           if (bookingIndex >= 0) {
             dbBookings[bookingIndex] = latestBooking;
@@ -483,6 +498,13 @@
             ),
             ...(Array.isArray(door?.other_media) ? door.other_media : [])
           ].filter(url => typeof url === 'string' && url.trim()))];
+          const productOnlyDoor = Boolean(window.BKBookingCompletion?.isProductOnlyDoor?.(
+            selectedBooking, door, i, doorsArr, productsArr, isDoorCancelledForCompletion
+          ));
+          const productOnlyReceivedPhoto = productOnlyDoor
+            ? window.BKBookingCompletion.getReceivedPhotoUrl(selectedBooking)
+            : '';
+          if (productOnlyReceivedPhoto) mediaUrlsList.push(productOnlyReceivedPhoto);
           const mediaThumbs = mediaUrlsList.map(url => {
             const isVid = /\.(mp4|mov|webm)(\?|$)/i.test(url);
             if (isVid) {
@@ -523,7 +545,7 @@
             productCellHtml += `
               <div class="booking-customer-signature" style="display:flex;flex-direction:column;gap:0.15rem;">
                 <span style="font-size:0.65rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;">Customer Signature</span>
-                <div class="booking-signature-placeholder">Not signed</div>
+                <div class="booking-signature-placeholder">${productOnlyReceivedPhoto ? 'Product only — received' : 'Not signed'}</div>
               </div>
             `;
           }
@@ -627,7 +649,7 @@
           };
 
           // Installers assigned to this door — show with role labels if available
-          let installersHtml = 'None Assigned';
+          let installersHtml = productOnlyDoor ? 'Product Only' : 'None Assigned';
           if (allProductsCancelled) {
             installersHtml = 'N/A';
           } else if (door && Array.isArray(door.installers)) {
@@ -637,7 +659,7 @@
                  return `<div class="booking-installer-assignment">${installerAvatarMarkup(inst)}<span class="booking-installer-copy"><span class="booking-installer-label">${escapeHtml(roleLabel)}</span><span class="booking-installer-value">${escapeHtml(formatInstallerName(inst.name))}</span></span></div>`;
                }).join('');
             } else {
-              installersHtml = 'None Assigned';
+              installersHtml = productOnlyDoor ? 'Product Only' : 'None Assigned';
             }
           } else if (selectedBooking.installers && selectedBooking.installers.length > 0) {
             let list = [];

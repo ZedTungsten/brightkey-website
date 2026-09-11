@@ -448,11 +448,16 @@
         .some(url => typeof url === 'string' && url.trim());
     }
 
+    const bookingCompletion = window.BKBookingCompletion;
     function isDoorCompletedForDisplay(booking, door, doorIndex, doors, products) {
-      return Boolean(door?.completed) || isDoorCancelledForCompletion(door, doorIndex, doors, products)
-        || (Boolean(door?.signature) && doorHasCompletionMedia(door));
+      return bookingCompletion.isDoorCompletedForDisplay(
+        booking, door, doorIndex, doors, products, isDoorCancelledForCompletion
+      );
     }
-    window.BKBookingCompletion = Object.freeze({ isDoorCompletedForDisplay });
+    window.BKBookingCompletion = Object.freeze({
+      ...bookingCompletion,
+      isDoorCompletedForDisplay
+    });
 
     function useBookingWorkflowForDoor(booking, door) {
       const key = getBookingWorkflowKeyForDoor(booking, door);
@@ -570,22 +575,11 @@
         const orderNos = calendarBookings.map(b => b.order_no).filter(Boolean);
         if (orderNos.length > 0) {
           try {
-            const { data: txsData, error: txsErr } = await sb
-              .from('inventory_transactions')
-              .select('reference_id, status')
-              .in('reference_id', orderNos);
-            if (!txsErr && txsData) {
-              txsData.forEach(tx => {
-                if (tx.reference_id) {
-                  if (!dbTransactionsMap.has(tx.reference_id)) {
-                    dbTransactionsMap.set(tx.reference_id, []);
-                  }
-                  dbTransactionsMap.get(tx.reference_id).push(tx.status);
-                }
-              });
-            }
+            dbTransactionsMap = await window.BKBookingCompletion.loadData({
+              sb, companyId: currentCompanyId, bookings: calendarBookings
+            });
           } catch (e) {
-            console.warn('Failed to batch load inventory transactions:', e);
+            console.warn('Failed to batch load booking completion data:', e);
           }
         }
 
@@ -901,10 +895,12 @@
           const todayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
           const isDayOff = b.product_skus && b.product_skus.toLowerCase().includes('day off');
           const isDayOffPassed = isDayOff && (b.scheduled_date <= todayStr);
+          const isProductOnlyBooking = bookingCompletion.isProductOnlyBooking(b, doorsArr, productsArr, isDoorCancelledForCompletion);
 
           const hasMedia = !hasUnallocatedActiveLocks && (isDayOffPassed || (doorsArr.length > 0 && doorsArr.every((door, doorIndex) => (
             doorHasCompletionMedia(door)
             || isDoorCancelledForCompletion(door, doorIndex, doorsArr, productsArr)
+            || (isProductOnlyBooking && Boolean(bookingCompletion.getReceivedPhotoUrl(b)))
           ))));
 
           const noInstallers = !b.installer_id && (!b.installers || b.installers.length === 0);
@@ -934,9 +930,9 @@
 
           const badgeHtml = isAborted
             ? `<span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;color:var(--text-muted);">Aborted</span>`
-            : (isDeliveryOnly && isFullyDone
+            : (isProductOnlyBooking && isFullyDone ? completionMarker : (isDeliveryOnly && isFullyDone
                 ? `<span class="calendar-inst-badge" style="background:var(--success);">${deliveryBadgeText}</span>`
-                : installerBadgeHtml);
+                : installerBadgeHtml));
 
           const slotColorClass = isDayOff ? 'day-off' : (isAfternoon(b.scheduled_time) ? 'pm' : 'am');
           const slotHtml = `
