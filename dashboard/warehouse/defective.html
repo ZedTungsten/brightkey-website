@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Damaged Goods — Brightkey Admin</title>
+  <title>Defective Products — Brightkey Admin</title>
   <link rel="preconnect" href="https://fonts.bunny.net" />
   <link href="https://fonts.bunny.net/css?family=commissioner:400,500,600,700,800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
@@ -24,8 +24,9 @@
     .product-thumb-placeholder { display: grid; place-items: center; color: var(--text-muted); }
     .damage-copy { max-width: 360px; white-space: pre-wrap; line-height: 1.45; color: var(--text-secondary); }
     .table-media-previews { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
-    .table-media-item { position: relative; flex: 0 0 46px; width: 46px; height: 46px; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-elevated); }
+    .table-media-item { position: relative; flex: 0 0 46px; width: 46px; height: 46px; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 7px; background: var(--bg-elevated); cursor: pointer; }
     .table-media-item img, .table-media-item video { width: 100% !important; height: 100% !important; object-fit: cover; }
+    .table-media-item:hover, .table-media-item:focus-visible { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan-dim); outline: none; }
     .table-video-mark { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.28); color: #fff; pointer-events: none; }
     .table-media-empty { color: var(--text-muted); font-size: 0.78rem; font-weight: 600; white-space: nowrap; }
     .workflow-status { display: inline-flex; align-items: center; padding: 0.25rem 0.55rem; border-radius: 999px; background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
@@ -61,6 +62,14 @@
     .media-progress-fill { height: 100%; border-radius: inherit; background: var(--cyan); transition: width 0.15s ease; }
     .modal-footer { display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid var(--border); }
     .confirm-modal { width: min(420px, calc(100vw - 2rem)); }
+    .damage-theater-overlay { background: rgba(9,9,11,0.9); z-index: 1200; }
+    .damage-theater { position: relative; display: grid; width: min(1100px, calc(100vw - 2rem)); height: min(82dvh, 760px); place-items: center; padding: 3.25rem 1.25rem 1.25rem; overflow: hidden; border: 1px solid rgba(255,255,255,0.16); border-radius: 12px; background: #09090B; box-shadow: 0 24px 60px rgba(0,0,0,0.45); }
+    .modal-close { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; padding: 0; border: 0; background: transparent; color: var(--text-muted); cursor: pointer; }
+    .modal-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+    .damage-theater .modal-close { position: absolute; top: 0.75rem; right: 0.75rem; z-index: 2; color: #D4D4D8; }
+    .damage-theater .modal-close:hover { color: #fff; }
+    .damage-theater img, .damage-theater video { display: none; max-width: 100%; max-height: 100%; border-radius: 8px; object-fit: contain; }
+    .damage-theater img.active, .damage-theater video.active { display: block; }
     tr.table-spacer-row, tr.table-spacer-row:hover { height: auto !important; background: transparent !important; border: 0 !important; pointer-events: none !important; }
     tr.table-spacer-row td { border: 0 !important; padding: 0 !important; pointer-events: none !important; }
     @media (max-width: 700px) {
@@ -92,7 +101,7 @@
               <a class="tab-btn" href="/dashboard/warehouse/receive">Receive <span id="badge-count-receive" style="display:none; background:var(--cyan); color:white; font-size:0.75rem; padding:1px 6px; border-radius:10px; margin-left:4px;">0</span></a>
               <a class="tab-btn" href="/dashboard/warehouse/transfer">Transfer</a>
               <a class="tab-btn" href="/dashboard/warehouse/return">Return</a>
-              <a class="tab-btn active" href="/dashboard/warehouse/damaged">Damaged</a>
+              <a class="tab-btn active" href="/dashboard/warehouse/defective">Defective</a>
             </div>
             <div class="table-scroll">
               <div class="tab-panel active">
@@ -101,7 +110,7 @@
                     <span>Damaged Goods</span>
                     <button class="btn btn-primary" type="button" onclick="openDamageModal()">
                       <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                      Issue Damaged Goods
+                      Issue Defective Product
                     </button>
                   </div>
                   <div class="damaged-subtabs" role="tablist" aria-label="Damaged goods status">
@@ -116,7 +125,7 @@
                           <th>Product Image</th>
                           <th>SKU</th>
                           <th>Product Name</th>
-                          <th>Damage Description</th>
+                          <th>Defective</th>
                           <th>Media Uploaded</th>
                           <th>Status</th>
                           <th>Actions</th>
@@ -139,7 +148,7 @@
   <div class="modal-overlay" id="damage-modal" aria-hidden="true" onclick="handleModalBackdrop(event)">
     <div class="modal damaged-modal" role="dialog" aria-modal="true" aria-labelledby="damage-modal-title">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;">
-        <h2 id="damage-modal-title" style="font-size:1.2rem; color:var(--text-primary); margin:0;">Issue Damaged Goods</h2>
+        <h2 id="damage-modal-title" style="font-size:1.2rem; color:var(--text-primary); margin:0;">Issue Defective Product</h2>
         <button class="btn btn-outline" type="button" onclick="closeDamageModal()" aria-label="Close" style="padding:0.4rem; width:34px; height:34px; justify-content:center;">
           <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.2" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
         </button>
@@ -147,13 +156,13 @@
       <form id="damage-form" onsubmit="saveDamage(event)" style="display:flex; flex-direction:column; gap:1rem;">
         <div class="form-group">
           <label class="form-label" for="damage-sku">SKU</label>
-          <select class="form-select" id="damage-sku" required>
+          <select class="form-select" id="damage-sku" required onchange="populateSupplierOptions('', this.value)">
             <option value="" disabled selected hidden>Select product SKU</option>
           </select>
         </div>
         <div class="form-group">
           <label class="form-label" for="damage-supplier">Supplier</label>
-          <select class="form-select" id="damage-supplier" required>
+          <select class="form-select" id="damage-supplier" required disabled>
             <option value="" disabled selected hidden>Select supplier</option>
           </select>
         </div>
@@ -181,6 +190,16 @@
     </div>
   </div>
 
+  <div class="modal-overlay damage-theater-overlay" id="damage-media-theater" aria-hidden="true" onclick="handleDamageTheaterBackdrop(event)">
+    <div class="damage-theater" role="dialog" aria-modal="true" aria-label="Damage media viewer">
+      <button type="button" class="modal-close" aria-label="Close" onclick="closeDamageMediaTheater()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+      </button>
+      <img id="damage-theater-image" alt="Damage media preview" />
+      <video id="damage-theater-video" controls playsinline></video>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="delete-damage-modal" aria-hidden="true" onclick="handleDeleteBackdrop(event)">
     <div class="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-damage-title">
       <h2 id="delete-damage-title" style="font-size:1.15rem; color:var(--text-primary); margin:0 0 0.6rem;">Delete damaged goods record?</h2>
@@ -204,6 +223,7 @@
     let companyId = null;
     let products = [];
     let suppliers = [];
+    let businesses = [];
     let damagedGoods = [];
     let activeDamageTab = 'active';
     let editingId = null;
@@ -249,21 +269,46 @@
         || {};
     }
 
+    function isDamageEligibleProduct(product) {
+      const excludedCategories = new Set(['service', 'services', 'supply', 'supplies', 'tool', 'tools']);
+      return !excludedCategories.has(String(product?.category || '').trim().toLowerCase());
+    }
+
     function populateSkuOptions(selectedId = '') {
       const select = document.getElementById('damage-sku');
       select.innerHTML = '<option value="" disabled hidden>Select product SKU</option>'
-        + products.map(product =>
+        + products.filter(isDamageEligibleProduct).map(product =>
           `<option value="${esc(product.id)}"${product.id === selectedId ? ' selected' : ''}>${esc(product.sku)} — ${esc(product.title || 'Unnamed Product')}</option>`
         ).join('');
       if (!selectedId) select.value = '';
     }
 
-    function populateSupplierOptions(selectedId = '') {
+    function normalizeBusinessName(value) {
+      return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, '')
+        .replace(/s$/, '');
+    }
+
+    function suppliersForProduct(productId) {
+      const product = products.find(item => item.id === productId);
+      if (!product) return [];
+      const business = businesses.find(item =>
+        normalizeBusinessName(item.name) === normalizeBusinessName(product.business)
+      );
+      return suppliers.filter(supplier => !supplier.business_id || supplier.business_id === business?.id);
+    }
+
+    function populateSupplierOptions(selectedId = '', productId = document.getElementById('damage-sku').value) {
       const select = document.getElementById('damage-supplier');
+      const eligibleSuppliers = suppliersForProduct(productId);
       select.innerHTML = '<option value="" disabled hidden>Select supplier</option>'
-        + suppliers.map(supplier =>
+        + eligibleSuppliers.map(supplier =>
           `<option value="${esc(supplier.id)}"${supplier.id === selectedId ? ' selected' : ''}>${esc(supplier.name)}</option>`
         ).join('');
+      select.disabled = !productId || eligibleSuppliers.length === 0;
       if (!selectedId) select.value = '';
     }
 
@@ -311,14 +356,14 @@
         const image = product.image_main;
         const mediaPreviews = [
           ...photos.slice(0, 5).map((url, index) => `
-            <div class="table-media-item" title="Picture ${index + 1}">
+            <button type="button" class="table-media-item" title="View picture ${index + 1}" aria-label="View damage picture ${index + 1}" data-media-kind="image" data-media-url="${esc(url)}" onclick="openDamageMediaTheater(this)">
               <img src="${esc(url)}" alt="Damage picture ${index + 1}" loading="lazy" />
-            </div>`),
+            </button>`),
           record.video_url ? `
-            <div class="table-media-item" title="Damage video">
+            <button type="button" class="table-media-item" title="View damage video" aria-label="View damage video" data-media-kind="video" data-media-url="${esc(record.video_url)}" onclick="openDamageMediaTheater(this)">
               <video src="${esc(record.video_url)}" muted preload="metadata"></video>
               <span class="table-video-mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="m7 4 12 8-12 8z"/></svg></span>
-            </div>` : ''
+            </button>` : ''
         ].filter(Boolean).join('');
         return `
           <tr>
@@ -439,7 +484,7 @@
 
     function openDamageModal() {
       resetDamageForm();
-      document.getElementById('damage-modal-title').textContent = 'Issue Damaged Goods';
+      document.getElementById('damage-modal-title').textContent = 'Issue Defective Product';
       document.getElementById('save-damage-btn').textContent = 'Save Damaged Goods';
       openOverlay('damage-modal');
     }
@@ -450,7 +495,7 @@
       resetDamageForm();
       editingId = id;
       populateSkuOptions(record.product_id);
-      populateSupplierOptions(record.supplier_id);
+      populateSupplierOptions(record.supplier_id, record.product_id);
       const editableWorkflowStatus = ['customer_possession', 'unpacked'].includes(record.status || 'unpacked');
       document.getElementById('damage-status').value = editableWorkflowStatus ? (record.status || 'unpacked') : 'unpacked';
       document.getElementById('damage-status').disabled = !editableWorkflowStatus;
@@ -475,6 +520,44 @@
 
     function handleModalBackdrop(event) {
       if (event.target.id === 'damage-modal') closeDamageModal();
+    }
+
+    function isSafeDamageMediaUrl(value, kind) {
+      const url = String(value || '').trim();
+      if (/^https?:\/\//i.test(url)) return true;
+      return kind === 'image' && /^data:image\/(?:png|jpe?g|gif|webp);base64,/i.test(url);
+    }
+
+    function openDamageMediaTheater(button) {
+      const kind = button?.dataset.mediaKind === 'video' ? 'video' : 'image';
+      const url = button?.dataset.mediaUrl || '';
+      if (!isSafeDamageMediaUrl(url, kind)) {
+        showToast('This media file cannot be opened safely.', true);
+        return;
+      }
+      const image = document.getElementById('damage-theater-image');
+      const video = document.getElementById('damage-theater-video');
+      image.classList.toggle('active', kind === 'image');
+      video.classList.toggle('active', kind === 'video');
+      if (kind === 'image') image.src = url;
+      else video.src = url;
+      openOverlay('damage-media-theater');
+    }
+
+    function closeDamageMediaTheater() {
+      const image = document.getElementById('damage-theater-image');
+      const video = document.getElementById('damage-theater-video');
+      video.pause();
+      image.removeAttribute('src');
+      video.removeAttribute('src');
+      video.load();
+      image.classList.remove('active');
+      video.classList.remove('active');
+      closeOverlay('damage-media-theater');
+    }
+
+    function handleDamageTheaterBackdrop(event) {
+      if (event.target.id === 'damage-media-theater') closeDamageMediaTheater();
     }
 
     function slotUploadIcon(type) {
@@ -840,22 +923,29 @@
         WarehousePage.companyId = companyId;
         await WarehousePage.loadWarehouseTabs(authInfo.tenantId);
 
-        const [productsResult, suppliersResult] = await Promise.all([
+        const [productsResult, suppliersResult, businessesResult] = await Promise.all([
           sb
             .from('products')
-            .select('id, sku, title, image_main')
+            .select('id, sku, title, business, category, image_main')
             .eq('company_id', companyId)
             .order('sku', { ascending: true }),
           sb
             .from('suppliers')
-            .select('id, name, street_address, city, province, contact_number, email')
+            .select('id, name, business_id, street_address, city, province, contact_number, email')
+            .eq('company_id', companyId)
+            .order('name', { ascending: true }),
+          sb
+            .from('tenant_businesses')
+            .select('id, name')
             .eq('company_id', companyId)
             .order('name', { ascending: true })
         ]);
         if (productsResult.error) throw productsResult.error;
         if (suppliersResult.error) throw suppliersResult.error;
+        if (businessesResult.error) throw businessesResult.error;
         products = productsResult.data || [];
         suppliers = suppliersResult.data || [];
+        businesses = businessesResult.data || [];
         populateSkuOptions();
         populateSupplierOptions();
         await Promise.all([
@@ -871,7 +961,8 @@
 
     document.addEventListener('keydown', event => {
       if (event.key !== 'Escape') return;
-      if (document.getElementById('delete-damage-modal').classList.contains('open')) closeDeleteModal();
+      if (document.getElementById('damage-media-theater').classList.contains('open')) closeDamageMediaTheater();
+      else if (document.getElementById('delete-damage-modal').classList.contains('open')) closeDeleteModal();
       else if (document.getElementById('damage-modal').classList.contains('open')) closeDamageModal();
     });
     document.addEventListener('DOMContentLoaded', init);

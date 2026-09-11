@@ -66,7 +66,7 @@ test('every module page is gated by its assigned module, including shared pages'
       'dashboard/warehouse/dispatch.html',
       'dashboard/warehouse/receive.html',
       'dashboard/warehouse/return.html',
-      'dashboard/warehouse/damaged.html',
+      'dashboard/warehouse/defective.html',
       'dashboard/warehouse/transfer.html',
       'dashboard/ship/send.html',
       'dashboard/ship/receive.html',
