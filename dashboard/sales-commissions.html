@@ -580,8 +580,22 @@
     let currentUserCanLock = false;
 
     function getCommissionBasisBooking(booking) {
-      const snapshot = booking?.commission_basis_snapshot;
-      return snapshot && typeof snapshot === 'object' ? { ...booking, ...snapshot } : booking;
+      const snapshot = booking?.commission_lock_snapshot;
+      return booking?.commissions_locked && snapshot && typeof snapshot === 'object'
+        ? { ...booking, ...snapshot }
+        : booking;
+    }
+
+    function createCommissionLockSnapshot(booking) {
+      const fields = [
+        'product_skus', 'product_names', 'product_qtys', 'product_unit_prices', 'product_totals', 'products',
+        'charge_labels', 'charge_values', 'deduction_labels', 'deduction_values', 'deposit_amount',
+        'subtotal', 'charges', 'deductions', 'grand_total', 'balance_due'
+      ];
+      return Object.fromEntries([
+        ...fields.map(field => [field, booking?.[field] ?? null]),
+        ['captured_at', new Date().toISOString()]
+      ]);
     }
 
     function parseBookingProducts(booking) {
@@ -625,6 +639,35 @@
       return hardwareProducts[doorIndex]?.cancelled === true;
     }
 
+    function parseBookingInstallers(value) {
+      if (Array.isArray(value)) return value;
+      try {
+        const installers = JSON.parse(value || '[]');
+        return Array.isArray(installers) ? installers : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function isCommissionProductOnlyDoor(booking, door, doorIndex, doors) {
+      if (isCommissionDoorCancelled(booking, door, doorIndex, doors)) return false;
+      const products = parseBookingProducts(booking);
+      const attachedSkus = Array.isArray(door?.products) ? door.products : [];
+      const hasActiveProduct = attachedSkus.length > 0
+        ? attachedSkus.some(sku => products.some(product => (
+          String(product?.sku || '').trim().toUpperCase() === String(sku || '').trim().toUpperCase()
+          && product?.cancelled !== true
+        )))
+        : products.some(product => product?.cancelled !== true && (
+          doors.length === 1 || Number(product?.doorIndex) === doorIndex
+        ));
+      const installers = Array.isArray(door?.installers)
+        ? door.installers
+        : parseBookingInstallers(booking?.installers);
+      const hasLegacyInstaller = !Array.isArray(door?.installers) && Boolean(booking?.installer_id || booking?.installer_name);
+      return hasActiveProduct && installers.length === 0 && !hasLegacyInstaller;
+    }
+
     function isCommissionReady(booking) {
       if (!booking) return false;
       const products = parseBookingProducts(booking);
@@ -635,7 +678,11 @@
         try { return JSON.parse(booking.doors || '[]'); } catch (_) { return []; }
       })();
       const activeDoors = doors.filter((door, doorIndex) => !isCommissionDoorCancelled(booking, door, doorIndex, doors));
-      return activeDoors.length > 0 && activeDoors.every(door => Boolean(door?.completed || door?.signature));
+      return activeDoors.length > 0 && activeDoors.every(door => {
+        const doorIndex = doors.indexOf(door);
+        return Boolean(door?.completed || door?.signature)
+          || (Boolean(booking._received_photo_url) && isCommissionProductOnlyDoor(booking, door, doorIndex, doors));
+      });
     }
 
     function showToast(msg, isError = false) {
@@ -1232,17 +1279,22 @@
         if (!currentCompanyId) return;
         try {
           const sb = window.BKAuth.sb;
-          const { error } = await sb
+          const booking = dbBookings.find(b => b.id === bookingId);
+          if (!booking) throw new Error('The commission row could not be found.');
+          const updatePayload = { commissions_locked: targetLocked };
+          if (targetLocked) updatePayload.commission_lock_snapshot = createCommissionLockSnapshot(booking);
+          const { data: savedBooking, error } = await sb
             .from('installation_bookings')
-            .update({ commissions_locked: targetLocked })
-            .eq('id', bookingId);
+            .update(updatePayload)
+            .eq('company_id', currentCompanyId)
+            .eq('id', bookingId)
+            .select('commissions_locked, commission_lock_snapshot')
+            .single();
 
           if (error) throw error;
 
-          const booking = dbBookings.find(b => b.id === bookingId);
-          if (booking) {
-            booking.commissions_locked = targetLocked;
-          }
+          booking.commissions_locked = savedBooking.commissions_locked;
+          booking.commission_lock_snapshot = savedBooking.commission_lock_snapshot;
 
           showToast(targetLocked ? 'Commissions locked successfully' : 'Commissions unlocked successfully');
           renderCommissionsTable();
@@ -1285,6 +1337,28 @@
         // Calculation helpers apply the locked commission snapshot where required.
         dbBookings = bookingsRes.data || [];
         dbProducts = productsRes.data || [];
+
+        const referenceIds = [...new Set(dbBookings.map(booking => String(booking.order_no || '').trim()).filter(Boolean))];
+        const bookingsByReference = new Map();
+        dbBookings.forEach(booking => {
+          if (!bookingsByReference.has(booking.order_no)) bookingsByReference.set(booking.order_no, []);
+          bookingsByReference.get(booking.order_no).push(booking);
+        });
+        for (let offset = 0; offset < referenceIds.length; offset += 100) {
+          const { data: deliveries, error: deliveriesError } = await sb
+            .from('delivery_bookings')
+            .select('reference_id, status, received_photo_url, delivered_at')
+            .eq('company_id', currentCompanyId)
+            .in('reference_id', referenceIds.slice(offset, offset + 100));
+          if (deliveriesError) throw deliveriesError;
+          (deliveries || []).forEach(delivery => {
+            const isReceived = String(delivery?.status || '').toLowerCase() === 'delivered' || Boolean(delivery?.delivered_at);
+            if (!isReceived || !String(delivery?.received_photo_url || '').trim()) return;
+            (bookingsByReference.get(delivery.reference_id) || []).forEach(booking => {
+              booking._received_photo_url = delivery.received_photo_url;
+            });
+          });
+        }
         
         cellAssignments = {};
         if (dbAssignmentsRes.data) {
