@@ -634,18 +634,14 @@
 
         if (slice.length === 0) {
           tbody.innerHTML = '<tr><td colspan="30" class="tbl-state">No employees found.</td></tr>';
-          document.getElementById('footer-info').textContent = 'No results';
-          document.getElementById('pagination').innerHTML = '';
+          this.renderPagination(0);
           return;
         }
 
         tbody.innerHTML = slice.map(emp => this.renderRow(emp)).join('');
         this.bindRowButtons();
 
-        // Footer
         const total = this.filtered.length;
-        const end = Math.min(start + this.pageSize, total);
-        document.getElementById('footer-info').textContent = `Showing ${start + 1}–${end} of ${total} employees`;
         this.renderPagination(total);
       },
 
@@ -915,20 +911,20 @@
           const url = emp.picture_link;
           if (!isEdit) {
             if (url) {
-              return `<td class="grp-docs"><div class="cell-pic">
+              return `<td class="grp-personal"><div class="cell-pic">
                 <img class="emp-avatar" src="${esc(url)}" alt="Photo" loading="lazy"
                   onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                 <span class="emp-avatar-placeholder" style="display:none;">${esc(initials(emp))}</span>
                 <a href="${esc(url)}" target="_blank" style="font-size:0.72rem;color:var(--cyan-light);">View</a>
               </div></td>`;
             }
-            return `<td class="grp-docs"><div class="cell-pic">
+            return `<td class="grp-personal"><div class="cell-pic">
               <span class="emp-avatar-placeholder">${esc(initials(emp))}</span>
               <span class="no-image-label">No Image</span>
             </div></td>`;
           }
           // Edit mode: file upload + URL input
-          return `<td class="grp-docs"><div class="doc-upload-wrap">
+          return `<td class="grp-personal"><div class="doc-upload-wrap">
             <div class="doc-upload-row">
               <label class="doc-upload-btn" title="Upload photo">
                 <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -972,6 +968,7 @@
           ${cell(emp.contact_number, 'contact_number', 'text', 'grp-personal col-contact')}
           ${cell(emp.emergency_contact_number, 'emergency_contact_number', 'text', 'grp-personal')}
           ${cell(emp.email, 'email', 'text', 'grp-personal col-email')}
+          ${cellPicture()}
           ${jobPostCell()}
           ${departmentCell()}
           ${teamsCell()}
@@ -991,7 +988,6 @@
           ${cell(emp.sss, 'sss')}
           ${cell(emp.pagibig, 'pagibig')}
           ${cell(emp.philhealth, 'philhealth')}
-          ${cellPicture()}
           ${cellDoc(emp.gov_id_link, 'View', 'gov_id_link', 'govid', 'image/*,.pdf')}
           ${cellDoc(emp.cv_link,     'View', 'cv_link',     'cv',    '.pdf,.doc,.docx')}
           ${cellDoc(emp.id_link,     'View', 'id_link',     'id',    'image/*,.pdf')}
@@ -1337,7 +1333,14 @@
       /* ── Pagination ── */
       renderPagination(total) {
         const pages = Math.ceil(total / this.pageSize);
-        if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+        const el = document.getElementById('pagination');
+        const footer = el.closest('.directory-table-footer');
+        if (pages <= 1) {
+          el.innerHTML = '';
+          footer.hidden = true;
+          return;
+        }
+        footer.hidden = false;
 
         let html = `<button class="page-btn" id="pg-prev" ${this.page === 1 ? 'disabled' : ''}>
           <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
@@ -1355,7 +1358,6 @@
           <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
         </button>`;
 
-        const el = document.getElementById('pagination');
         el.innerHTML = html;
 
         el.querySelectorAll('[data-page]').forEach(btn => {
@@ -1467,7 +1469,7 @@
             ['contact_number', 'Contact #'], ['emergency_contact_number', 'Emergency Contact'],
             ['email', 'Email'], ['tin', 'TIN'], ['sss', 'SSS'],
             ['pagibig', 'PAG-IBIG'], ['philhealth', 'PhilHealth'],
-            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift Range'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'ID Link'], ['payout_details', 'Payout Details'], ['payout_details_image', 'Payout Details Image'],
+            ['work_email', 'Work Email'], ['assignment', 'Assignment'], ['shift_days', 'Shift Days'], ['shift_time_1', 'Shift Range'], ['picture_link', 'Picture Link'], ['gov_id_link', "Gov't ID Link"], ['cv_link', 'CV Link'], ['id_link', 'Company ID'], ['payout_details', 'Payout Details'], ['payout_details_image', 'Payout Details Image'],
           ];
           const header = cols.map(c => `"${c[1]}"`).join(',');
           const rows = this.filtered.map(emp =>

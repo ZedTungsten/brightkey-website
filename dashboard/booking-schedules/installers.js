@@ -629,6 +629,7 @@
             if (job.roles.includes('service')) summary.service++;
           });
         });
+        window.BKInstallerCustomCredits.applyToSummary(summary, employee.id);
         summary.installationDone = (summary.lead - summary.scheduledLead) + (summary.assist - summary.scheduledAssist);
         summary.installationScheduled = summary.scheduledLead + summary.scheduledAssist;
         summary.total = summary.lead + summary.assist + summary.ocular + summary.backjobs;
@@ -747,6 +748,7 @@
             rows.push({ employee, date: booking.scheduled_date || '', completed: job.completed, customer: booking.customer_name || '—', sku: getInstallerHistorySkus(booking, job), assignment: roles.map(role => role.charAt(0).toUpperCase() + role.slice(1)).join(', ') });
           });
         });
+        window.BKInstallerCustomCredits.appendHistoryRows(rows, employee);
       });
       rows.sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer));
       if (!rows.length) {

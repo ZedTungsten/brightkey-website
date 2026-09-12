@@ -652,11 +652,13 @@ test('employee profile shows the saved CV link directly below the ID link', () =
   assert.match(profile, /cvLink\.rel = 'noopener noreferrer'/);
 });
 
-test('employee directory result count and pagination render inside the table card', () => {
+test('employee directory hides its pagination footer when only one page is needed', () => {
   const directory = fs.readFileSync(new URL('../dashboard/employee-directory.html', import.meta.url), 'utf8');
-  assert.ok(directory.indexOf('id="footer-info"') < directory.indexOf('<!-- Close table-card -->'));
-  assert.ok(directory.indexOf('id="footer-info"') < directory.indexOf('id="pagination"'));
-  assert.match(directory, /class="table-footer directory-table-footer"/);
+  const directoryClient = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(directory, /id="footer-info"/);
+  assert.match(directory, /class="table-footer directory-table-footer" hidden/);
+  assert.match(directoryClient, /if \(pages <= 1\)[\s\S]*?footer\.hidden = true/);
+  assert.match(directoryClient, /footer\.hidden = false/);
 });
 
 test('employee hierarchy supports levels one through seven across dependent modules', () => {
@@ -679,11 +681,13 @@ test('employee hierarchy supports levels one through seven across dependent modu
   assert.match(migration, /visibility_level BETWEEN 1 AND 7/);
 });
 
-test('pending employee update requests show a tab count and Directory sidebar dot', () => {
+test('pending employee update requests show the tab count and matching HR sidebar dots', () => {
   const sidebar = fs.readFileSync(new URL('../js/sidebar.js', import.meta.url), 'utf8');
   const directory = fs.readFileSync(new URL('../dashboard/employee-directory.js', import.meta.url), 'utf8');
 
   assert.match(sidebar, /id="directory-request-badge-dot"/);
+  assert.match(sidebar, /id="hr-request-badge-dot"/);
+  assert.match(sidebar, /\['directory-request-badge-dot', 'hr-request-badge-dot'\]\.forEach/);
   assert.match(sidebar, /tenantId: roleInfo\.tenantId/);
   assert.match(sidebar, /select\('id', \{ count: 'exact', head: true \}\)/);
   assert.match(sidebar, /\.eq\('tenant_id', tenantId\)/);

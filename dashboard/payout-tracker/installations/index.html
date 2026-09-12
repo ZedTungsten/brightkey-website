@@ -72,7 +72,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
-  <script src="/js/main.js?v=20260815-1"></script>
+  <script src="/js/main.js?v=20260912-custom-credits"></script>
   <script>
     'use strict';
 
@@ -107,6 +107,7 @@
       companyId: null,
       employees: [],
       bookingsList: [],
+      customCredits: [],
       payoutSettings: {
         installations_before_crediting: 15,
         lead_credit: 1.0,
@@ -183,6 +184,14 @@
           if (error) throw error;
           this.bookingsList = data || [];
         } catch (e) { this.bookingsList = []; console.error(e); }
+
+        try {
+          const { data, error } = await sb.from('installer_custom_credits')
+            .select('id, employee_id, label, credit_date, credit_value, created_at')
+            .eq('company_id', this.companyId);
+          if (error) throw error;
+          this.customCredits = data || [];
+        } catch (e) { this.customCredits = []; console.error(e); }
       },
 
       monthKey() {
@@ -411,6 +420,7 @@
         const activeInstallers = window.BKInstallerPayouts.calculateMonth({
           employees: this.employees,
           bookings: this.bookingsList,
+          customCredits: this.customCredits,
           payoutSettings: this.payoutSettings,
           payoutSchedules: this.payoutSchedules,
           monthKey: mk,

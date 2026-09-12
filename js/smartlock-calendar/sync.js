@@ -226,6 +226,17 @@ async function syncData() {
     });
 
     if (error) throw error;
+    try {
+      const { data: customCredits, error: customCreditsError } = await sb.rpc(
+        'get_installer_custom_credits',
+        { p_token: getInstallerSessionToken() }
+      );
+      if (customCreditsError) throw customCreditsError;
+      installerCustomCredits = customCredits || [];
+    } catch (customCreditsError) {
+      installerCustomCredits = [];
+      console.error('Custom credits could not be synced:', customCreditsError);
+    }
 
     // Fetch delivery bookings to map order_no/reference_id to status
     try {

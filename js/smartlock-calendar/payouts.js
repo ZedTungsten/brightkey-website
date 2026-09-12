@@ -45,6 +45,7 @@
     return [
       { assignment: 'Lead', credit: settings.lead_credit ?? 1 },
       { assignment: 'Assist', credit: settings.assist_credit ?? 0.5 },
+      { assignment: 'Custom', credit: 1 },
       { assignment: 'Service', sku: 'OCULAR', credit: settings.ocular_credit ?? 0, effective_from: effective },
       { assignment: 'Service', sku: 'REPAIR', credit: settings.repair_credit ?? 0, effective_from: effective },
       ...(settings.service_credit_rules || [])
@@ -58,6 +59,7 @@
     return [
       { assignment: 'Lead', amount: settings.lead_rate || 1000 },
       { assignment: 'Assist', amount: settings.assist_rate || 500 },
+      { assignment: 'Custom', amount: settings.custom_rate ?? settings.lead_rate ?? 1000 },
       { assignment: 'Service', sku: 'OCULAR', amount: settings.ocular_rate || 0, effective_from: effective },
       { assignment: 'Service', sku: 'REPAIR', amount: settings.repair_rate || 0, effective_from: effective },
       ...(settings.extra_services || []).map(rule => ({ ...rule, assignment: 'Service', amount: rule.amount ?? rule.rate }))
@@ -69,6 +71,7 @@
     const normalizedSkus = (skus || []).map(normalizeSku);
     if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
     if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
+    if (normalizedRoles.includes('custom')) return { assignment: 'Custom', sku: '' };
     if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
     if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
     if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus, product_ids: productIds || [] };
@@ -608,6 +611,17 @@ function drawPayouts() {
           assignmentDate: d.assigned_at || b.created_at || b.scheduled_date
         });
       }
+    });
+  });
+
+  installerCustomCredits.forEach(credit => {
+    if (!credit.credit_date) return;
+    doorJobs.push({
+      completed_at: credit.credit_date,
+      roles: ['custom'],
+      skus: [],
+      scheduled_date: credit.credit_date,
+      assignmentDate: credit.credit_date
     });
   });
 
