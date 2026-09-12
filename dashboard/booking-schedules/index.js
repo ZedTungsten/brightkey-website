@@ -230,6 +230,7 @@
       const pageTitle = document.getElementById('booking-page-title');
       const createNoteButton = document.getElementById('create-installer-note');
       const issueToolButton = document.getElementById('issue-tool-button');
+      const customCreditButton = document.getElementById('add-installer-custom-credit');
       const isInstallerAssignments = currentSubpage === 'installer-assignments';
       const isInstallerAccounts = currentSubpage === 'installer-accounts';
       const isInstallerNotes = currentSubpage === 'installer-notes';
@@ -260,6 +261,7 @@
       if (pageTitle) pageTitle.textContent = isInstallersPage ? 'Installers' : 'Installation Schedules';
       if (createNoteButton) createNoteButton.style.display = isInstallerNotes ? 'inline-flex' : 'none';
       if (issueToolButton) issueToolButton.style.display = isInstallerTools ? 'inline-flex' : 'none';
+      if (customCreditButton) customCreditButton.style.display = isInstallerAssignments ? 'inline-flex' : 'none';
       document.body.classList.toggle('booking-all-bookings-page', currentSubpage === 'all-bookings');
       document.body.classList.toggle('installer-assignments-page', isInstallerAssignments);
       document.body.classList.toggle('installer-accounts-page', isInstallerAccounts);
@@ -537,7 +539,8 @@
             .select('value')
             .eq('company_id', currentCompanyId)
             .eq('key', 'booking_calendar_event_types')
-            .maybeSingle()
+            .maybeSingle(),
+          getCurrentSubpage() === 'installer-assignments' ? window.BKInstallerCustomCredits.load({ sb, companyId: currentCompanyId, start: monthRange.start, end: monthRange.end }) : Promise.resolve()
         ]);
 
         if (dayEventsRes.error) throw dayEventsRes.error;

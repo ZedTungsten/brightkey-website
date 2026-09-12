@@ -284,7 +284,7 @@
   <script src="/js/dashboard-ui.js?v=20260731-payslip-4"></script>
   <script src="/js/auth.js"></script>
   <script src="/js/sidebar.js"></script>
-  <script src="/js/main.js?v=20260815-1"></script>
+  <script src="/js/main.js?v=20260912-custom-credits"></script>
   <script src="/js/sales-commission-calculator.js?v=20260829-1"></script>
   <script src="/js/payout-snapshots.js?v=20260909-1"></script>
   <script>
@@ -337,6 +337,7 @@
       commissionProducts: [],
       commissionsConfig: {},
       bookingsList: [],
+      customCredits: [],
       payoutComponentCache: new Map(),
       payoutSystemCache: new Map(),
 
@@ -381,7 +382,7 @@
           'installer_payout_settings', 'journal_account_employee_assignments', 'commissions_config'
         ];
         const settle = request => Promise.resolve(request).catch(error => ({ data: null, error }));
-        const [settingsResult, employeesResult, adjustmentsResult, commissionsResult, bookingsResult, accountsResult, productsResult] = await Promise.all([
+        const [settingsResult, employeesResult, adjustmentsResult, commissionsResult, bookingsResult, customCreditsResult, accountsResult, productsResult] = await Promise.all([
           settle(sb.from('global_settings').select('key, value').eq('company_id', this.companyId).in('key', settingKeys)),
           settle(sb.from('employees')
             .select('id, first_name, middle_name, last_name, salary, employment_status, date_inactive, department, title, payout_details, payout_details_image, reporting_to, date_hired, shift_days, assignment')
@@ -390,6 +391,7 @@
           settle(sb.from('employee_adjustments').select('id, employee_id, amount, date, label, paid').eq('company_id', this.companyId)),
           settle(sb.from('commission_assignments').select('employee_id, booking_id, product_index, amount, sku, rate_label').eq('company_id', this.companyId)),
           settle(sb.from('installation_bookings').select('*').eq('company_id', this.companyId)),
+          settle(sb.from('installer_custom_credits').select('id, employee_id, label, credit_date, credit_value, created_at').eq('company_id', this.companyId)),
           settle(sb.from('journal_accounts').select('id, name').eq('company_id', this.companyId)),
           settle(sb.from('products').select('id, sku, business, category, tags').or(`company_id.eq.${this.companyId},company_id.is.null`))
         ]);
@@ -423,6 +425,8 @@
 
         if (bookingsResult.error) console.error(bookingsResult.error);
         this.bookingsList = bookingsResult.data || [];
+        if (customCreditsResult.error) console.error(customCreditsResult.error);
+        this.customCredits = customCreditsResult.data || [];
 
         if (productsResult.error) console.error(productsResult.error);
         this.commissionProducts = productsResult.data || [];
@@ -699,6 +703,15 @@
             if (d.completed) {
               doorJobs.push({ ...d, roles: isOcular ? ['ocular'] : isRepair ? ['repair'] : d.roles, assignmentDate: d.assigned_at || b.created_at || b.scheduled_date });
             }
+          });
+        });
+
+        this.customCredits.filter(credit => credit.employee_id === empId && credit.credit_date).forEach(credit => {
+          doorJobs.push({
+            roles: ['custom'],
+            skus: [],
+            scheduled_date: credit.credit_date,
+            assignmentDate: credit.created_at || credit.credit_date
           });
         });
 

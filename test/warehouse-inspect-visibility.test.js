@@ -6,7 +6,7 @@ const sharedSource = fs.readFileSync(new URL('../dashboard/warehouse/shared.js',
 const read = relativePath => fs.readFileSync(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 
 test('Warehouse Requests is removed and its legacy routes safely redirect to Pack', () => {
-  const warehouseTabs = ['inspected', 'pack', 'dispatch', 'receive', 'transfer', 'return', 'damaged'];
+  const warehouseTabs = ['inspected-page', 'pack', 'dispatch', 'receive', 'transfer', 'return', 'defective'];
   warehouseTabs.forEach(page => {
     const source = read(`dashboard/warehouse/${page}.html`);
     assert.doesNotMatch(source, /warehouse\/requests|>Requests</);
@@ -70,6 +70,18 @@ test('Assigned lists allocated customer inspections until dispatch using a bound
   assert.match(assigned, /allocated_at: allocation\.allocated_at/);
 });
 
+test('In Stock searches inspections by code, SKU, or inspector before pagination', () => {
+  const html = read('dashboard/warehouse/inspected-page.html');
+  const script = read('dashboard/warehouse/inspected.js');
+  assert.match(html, /id="inspected-search" type="search"/);
+  assert.match(html, /placeholder="Search code, SKU, or inspected by\.\.\."/);
+  assert.ok(html.indexOf('id="inspected-search"') < html.indexOf('id="pending-inspections"'));
+  assert.match(script, /query = query\.or\(`code\.ilike\.\*\$\{inspectedSearch\}\*,sku\.ilike\.\*\$\{inspectedSearch\}\*,inspected_by_name\.ilike\.\*\$\{inspectedSearch\}\*`\)/);
+  assert.match(script, /byId\('inspected-search'\)\.addEventListener\('input'/);
+  assert.match(script, /if \(requestId !== recordsRequestId\) return/);
+  assert.match(script, /loadRecords\(0\)/);
+});
+
 test('New Inspect exposes a company-scoped guideline only for the exact selected SKU', () => {
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
@@ -98,7 +110,7 @@ test('New Inspect generates its read-only code after an exact SKU selection', ()
 test('Inspected modals restore focus before becoming hidden and inert', () => {
   const html = read('dashboard/warehouse/inspected-page.html');
   const script = read('dashboard/warehouse/inspected.js');
-  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 7);
+  assert.equal((html.match(/class="modal-overlay"[^>]*aria-hidden="true" inert/g) || []).length, 8);
   assert.match(script, /returnFocus\.focus\(\{ preventScroll: true \}\)[\s\S]*?modal\.inert = true;[\s\S]*?setAttribute\('aria-hidden', 'true'\)/);
   assert.match(script, /modal\.inert = false;[\s\S]*?setAttribute\('aria-hidden', 'false'\)[\s\S]*?\.focus\(\{ preventScroll: true \}\)/);
 });
@@ -198,7 +210,8 @@ test('Pack sends reserved booking items directly to a code-gated unit queue', ()
   const pack = read('dashboard/warehouse/pack.html');
   assert.match(pack, /function parsePackDate\(value\)[\s\S]*?function formatPackDate\(value\)[\s\S]*?function formatInstallSchedule\(dateValue, timeValue\)/);
   assert.match(pack, /\.in\('status', \['reserved', 'inspect'\]\)\.eq\('type', 'customer_order'\)/);
-  assert.match(pack, /transaction\.status === 'reserved' && bookingReferences\.has\(transaction\.reference_id\)/);
+  assert.match(pack, /window\.getActiveOrderTransactions\(transactions, bookingByOrder\.get\(referenceId\)\)/);
+  assert.match(pack, /workflowStatus === 'reserved' && bookingReferences\.has\(transaction\.reference_id\)/);
   assert.match(pack, /<th>Install Date<\/th>\s*<th[^>]*>Code<\/th>/);
   assert.doesNotMatch(pack, /<th>QA Date<\/th>/);
   assert.doesNotMatch(pack, /modal-qa-ref|qa_photo_url|QA Inspected/);

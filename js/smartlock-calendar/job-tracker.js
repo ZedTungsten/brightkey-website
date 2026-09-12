@@ -162,6 +162,23 @@ function drawJobTracker() {
     });
   });
 
+  installerCustomCredits.filter(credit => String(credit.credit_date || '').startsWith(targetMonthKey)).forEach(credit => {
+    totalCount++;
+    const date = new Date(`${credit.credit_date}T00:00:00`);
+    listHtml += `
+      <div style="background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.85rem;display:flex;flex-direction:column;gap:0.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:0.75rem;font-weight:700;color:var(--text-muted);">Custom credit</span>
+          <div style="display:flex;gap:0.35rem;align-items:center;">
+            <span style="font-size:0.68rem;font-weight:700;background:#E0F2FE;color:#0369A1;padding:0.15rem 0.4rem;border-radius:4px;text-transform:uppercase;">Custom</span>
+            <span style="font-size:0.68rem;font-weight:700;background:#D1FAE5;color:#065F46;padding:0.15rem 0.4rem;border-radius:4px;text-transform:uppercase;">Completed</span>
+          </div>
+        </div>
+        <div style="font-size:0.9rem;font-weight:700;color:var(--text-primary);">${escapeHtml(credit.label || 'Custom credit')}</div>
+        <div style="font-size:0.8rem;color:var(--text-secondary);">${MONTH_NAMES[date.getMonth()]} ${date.getDate()} · ${Number(credit.credit_value) || 1} credit</div>
+      </div>`;
+  });
+
   if (!listHtml) {
     listHtml = `<div style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No job assignments recorded for this month.</div>`;
   }

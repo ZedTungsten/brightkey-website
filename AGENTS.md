@@ -11,6 +11,10 @@ Assume another contributor may be changing the same files on another computer.
 - Make and test changes on the task branch. Stage explicit task files; never use
   broad staging when generated product pages, tenant logos, currency output, or
   other incidental files are present.
+- Treat `supabase/.temp/` files as required machine-local Supabase CLI metadata.
+  Never commit or merge them, and omit them from routine user-facing status
+  reports. Mention them only when they cause an actual problem that requires
+  attention.
 - Keep one active integration branch for a continuing localhost review session.
   Follow-up changes and recovered fixes must be incorporated into that branch
   before they are shown. Before each localhost handoff, check the active branch,
@@ -463,6 +467,43 @@ projections cover the full contract, avoidable N+1 access is gone, indexes are
 evidence-backed, global code performs no feature scan, production-shaped route
 tests pass, and query growth follows the requested page/report rather than the
 tenant's lifetime dataset.
+
+### 5.3.10 New Features Must Not Break Their Host Pages
+> [!CRITICAL]
+> **OPTIONAL FEATURE FAILURE MUST REMAIN LOCAL TO THAT FEATURE**: Adding a new
+> query, RPC, counter, media loader, report, or integration to an existing page
+> must not prevent the page's primary content, navigation, or unrelated features
+> from loading.
+
+- Identify the page's core requests and load them independently from optional
+  feature requests. Give every optional loader its own error boundary and a
+  small feature-specific unavailable state or safe empty fallback.
+- Do not use `Promise.all()` for requests with different failure semantics. Use
+  separate guarded awaits or `Promise.allSettled()` so one optional rejection
+  cannot cancel the host page. Keep required transactional groups atomic.
+- A caught error must remain observable through a scoped console/structured log;
+  never silently hide it. The UI message must describe only the affected feature
+  and must not replace otherwise valid page content.
+- For every new Supabase table or RPC, version explicit Data API grants in the
+  migration in addition to RLS and token/ownership checks. Test every role the
+  actual browser client may use (`anon`, `authenticated`, and any applicable
+  privileged path), plus invalid, expired, cross-employee, and cross-tenant
+  credentials. A role grant permits invocation; authorization remains inside
+  RLS or the validated function contract.
+- Deploy database support before or atomically with frontend callers. Confirm the
+  exact local and remote migration versions match, and test the frontend against
+  both the supported schema and an unavailable optional endpoint when practical.
+- Add a regression test that forces each new optional request to fail and proves
+  the page's core content and existing functions still load. Also retain a
+  success-path test proving the feature appears for authorized users.
+- Verify every affected route in a real authenticated browser session, including
+  shared-origin states where a nominally public portal may inherit an existing
+  dashboard Supabase session. Check the network response, console, loading state,
+  main content, navigation, and the new feature—not only the database query.
+- Before handoff and again before merge, enumerate all pages and shared consumers
+  touched by the new loader/schema/helper, run their targeted tests, and confirm
+  a failure in the new feature does not cause a blank page, endless loader,
+  logout, missing unrelated records, or disabled workflow.
 
 ---
 

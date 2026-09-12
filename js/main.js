@@ -167,6 +167,7 @@
     return [
       { assignment: 'Lead', credit: settings.lead_credit ?? 1 },
       { assignment: 'Assist', credit: settings.assist_credit ?? 0.5 },
+      { assignment: 'Custom', credit: 1 },
       { assignment: 'Service', sku: 'OCULAR', credit: settings.ocular_credit ?? 0, effective_from: effective },
       { assignment: 'Service', sku: 'REPAIR', credit: settings.repair_credit ?? 0, effective_from: effective },
       ...(settings.service_credit_rules || [])
@@ -180,6 +181,7 @@
     return [
       { assignment: 'Lead', amount: settings.lead_rate || 1000 },
       { assignment: 'Assist', amount: settings.assist_rate || 500 },
+      { assignment: 'Custom', amount: settings.custom_rate ?? settings.lead_rate ?? 1000 },
       { assignment: 'Service', sku: 'OCULAR', amount: settings.ocular_rate || 0, effective_from: effective },
       { assignment: 'Service', sku: 'REPAIR', amount: settings.repair_rate || 0, effective_from: effective },
       ...(settings.extra_services || []).map(rule => ({ ...rule, assignment: 'Service', amount: rule.amount ?? rule.rate }))
@@ -191,6 +193,7 @@
     const normalizedSkus = (skus || []).map(normalizeSku);
     if (normalizedRoles.includes('ocular') || normalizedSkus.includes('OCULAR')) return { assignment: 'Service', sku: 'OCULAR' };
     if (normalizedRoles.includes('repair') || normalizedSkus.includes('REPAIR')) return { assignment: 'Service', sku: 'REPAIR' };
+    if (normalizedRoles.includes('custom')) return { assignment: 'Custom', sku: '' };
     if (normalizedRoles.includes('lead')) return { assignment: 'Lead', sku: '' };
     if (normalizedRoles.includes('assist')) return { assignment: 'Assist', sku: '' };
     if (normalizedRoles.includes('service')) return { assignment: 'Service', sku: normalizedSkus[0] || '', skus: normalizedSkus, product_ids: productIds || [] };
@@ -251,7 +254,7 @@
   }
 
   root.BKInstallerPayouts = Object.freeze({
-    calculateMonth({ employees = [], bookings = [], payoutSettings = {}, payoutSchedules = [], monthKey, resolveAssignedDoors } = {}) {
+    calculateMonth({ employees = [], bookings = [], customCredits = [], payoutSettings = {}, payoutSchedules = [], monthKey, resolveAssignedDoors } = {}) {
       if (!monthKey || typeof resolveAssignedDoors !== 'function') return [];
       const eligibleBookings = bookings
         .filter(booking => booking.scheduled_date && String(booking.status || '').toLowerCase() !== 'cancelled')
@@ -282,11 +285,27 @@
             const weight = rulesApi.creditForJob(payoutSettings, { roles, skus: jobSkus, assignmentDate, workDate: booking.scheduled_date });
             const sourceMonth = String(booking.scheduled_date).slice(0, 7);
             jobs.push({ booking, door, roles, jobSkus, weight, sourceMonth, assignmentDate });
-            const bucket = cutoffBucket(booking.scheduled_date, payoutSchedules);
-            if (bucket?.monthKey === sourceMonth) {
-              settledCreditBySourceMonth[sourceMonth] = (settledCreditBySourceMonth[sourceMonth] || 0) + weight;
-            }
           });
+        });
+
+        customCredits.filter(credit => credit.employee_id === employee.id && credit.credit_date).forEach(credit => {
+          const sourceMonth = String(credit.credit_date).slice(0, 7);
+          jobs.push({
+            booking: { scheduled_date: credit.credit_date, created_at: credit.created_at || credit.credit_date },
+            door: { roles: ['custom'], skus: [] },
+            roles: ['custom'],
+            jobSkus: [],
+            weight: Number(credit.credit_value) || 1,
+            sourceMonth,
+            assignmentDate: credit.created_at || credit.credit_date
+          });
+        });
+        jobs.sort((a, b) => String(a.booking.scheduled_date).localeCompare(String(b.booking.scheduled_date)));
+        jobs.forEach(job => {
+          const bucket = cutoffBucket(job.booking.scheduled_date, payoutSchedules);
+          if (bucket?.monthKey === job.sourceMonth) {
+            settledCreditBySourceMonth[job.sourceMonth] = (settledCreditBySourceMonth[job.sourceMonth] || 0) + job.weight;
+          }
         });
 
         let rolloverCredit = 0;

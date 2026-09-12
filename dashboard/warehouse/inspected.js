@@ -20,6 +20,9 @@
   let editExistingMediaUrls = [];
   let editSelectedFiles = [];
   let skuSearchTimer;
+  let inspectedSearchTimer;
+  let inspectedSearch = '';
+  let recordsRequestId = 0;
   let guidelineRequestId = 0;
   let generatedCodeSku = '';
   const modalReturnFocus = new WeakMap();
@@ -509,7 +512,7 @@
       const cell = document.createElement('td');
       cell.colSpan = 6;
       cell.className = 'empty-cell';
-      cell.textContent = 'No inspected records yet.';
+      cell.textContent = inspectedSearch ? 'No inspections match your search.' : 'No inspected records yet.';
       row.appendChild(cell);
       body.appendChild(row);
     }
@@ -763,15 +766,21 @@
   }
 
   async function loadRecords(page = 0) {
+    const requestId = ++recordsRequestId;
     const start = page * PAGE_SIZE;
-    const { data, error, count } = await sb.from('warehouse_inspections')
+    let query = sb.from('warehouse_inspections')
       .select('id, code, sku, media_urls, inspected_by, inspected_by_name, inspected_at, warehouse_inspection_allocations()', { count: 'exact' })
       .eq('company_id', companyId)
       .eq('inspection_status', 'completed')
-      .is('warehouse_inspection_allocations', null)
+      .is('warehouse_inspection_allocations', null);
+    if (inspectedSearch) {
+      query = query.or(`code.ilike.*${inspectedSearch}*,sku.ilike.*${inspectedSearch}*,inspected_by_name.ilike.*${inspectedSearch}*`);
+    }
+    const { data, error, count } = await query
       .order('inspected_at', { ascending: false })
       .range(start, start + PAGE_SIZE - 1);
     if (error) throw error;
+    if (requestId !== recordsRequestId) return;
     currentPage = page;
     totalRecords = count || 0;
     records = (data || []).map(({ warehouse_inspection_allocations: _allocations, ...record }) => record);
@@ -896,6 +905,7 @@
         onConnected: () => loadRecords(currentPage)
       });
       await Promise.all([loadBusinesses(), loadWarehouseMembers(), loadRecords(0)]);
+      byId('inspected-search').disabled = false;
       await window.WarehouseInspectedPending.init({
         sb,
         companyId,
@@ -948,6 +958,17 @@
   byId('inspect-delete-confirm').addEventListener('click', confirmDelete);
   byId('inspected-prev-page').addEventListener('click', () => changePage(currentPage - 1));
   byId('inspected-next-page').addEventListener('click', () => changePage(currentPage + 1));
+  byId('inspected-search').addEventListener('input', event => {
+    clearTimeout(inspectedSearchTimer);
+    const searchValue = event.target.value;
+    inspectedSearchTimer = setTimeout(() => {
+      inspectedSearch = String(searchValue || '').trim().replace(/[*,%()]/g, ' ').replace(/\s+/g, ' ');
+      loadRecords(0).catch(error => {
+        console.error(error);
+        showToast('Inspected records could not be searched. Please try again.', true);
+      });
+    }, 250);
+  });
   byId('inspected-page-numbers').addEventListener('click', event => {
     const button = event.target.closest('[data-page]');
     if (button) changePage(Number(button.dataset.page));

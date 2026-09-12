@@ -80,6 +80,25 @@ test('shared installer payout uses the actual role rate after threshold', () => 
   assert.equal(row.total, 500);
 });
 
+test('custom installer credits count as completed and earn the configured custom rate past threshold', () => {
+  const [row] = context.BKInstallerPayouts.calculateMonth({
+    employees: [{ id: 'installer' }],
+    bookings: [],
+    customCredits: [
+      { employee_id: 'installer', label: 'Training support', credit_date: '2026-09-10', credit_value: 1 },
+      { employee_id: 'installer', label: 'Warehouse support', credit_date: '2026-09-11', credit_value: 1 }
+    ],
+    payoutSettings: { installations_before_crediting: 1, lead_rate: 1000, custom_rate: 750 },
+    payoutSchedules: [15, 30],
+    monthKey: '2026-09',
+    resolveAssignedDoors: () => []
+  });
+
+  assert.equal(row.completedCredit, 2);
+  assert.equal(row.thresholdEarnings, 750);
+  assert.equal(row.total, 750);
+});
+
 test('shared installer payout rolls work after the final cutoff into next month', () => {
   const [row] = context.BKInstallerPayouts.calculateMonth({
     employees: [{ id: 'installer' }],
